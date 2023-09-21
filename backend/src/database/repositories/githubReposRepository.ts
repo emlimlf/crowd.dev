@@ -25,6 +25,8 @@ export default class GithubReposRepository {
         INSERT INTO "${table}"
         (${joinedColumns})
         VALUES ${placeholders.join(', ')}
+        DO UPDATE SET "segmentId" = EXCLUDED."segmentId",
+                      "integrationId" = EXCLUDED."integrationId"
       `,
       {
         replacements,
