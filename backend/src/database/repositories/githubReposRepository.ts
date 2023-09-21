@@ -25,7 +25,8 @@ export default class GithubReposRepository {
         INSERT INTO "${table}"
         (${joinedColumns})
         VALUES ${placeholders.join(', ')}
-        ON CONFLICT ("tenantId", "url") DO UPDATE SET "segmentId" = EXCLUDED."segmentId"
+        DO UPDATE SET "segmentId" = EXCLUDED."segmentId",
+                      "integrationId" = EXCLUDED."integrationId"
       `,
       {
         replacements,
