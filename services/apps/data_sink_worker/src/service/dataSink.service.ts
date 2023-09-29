@@ -102,6 +102,7 @@ export default class DataSinkService extends LoggerBase {
 
     try {
       const data = resultInfo.data
+      this.log.info({ resultType: data.type }, 'Processing result.')
       switch (data.type) {
         case IntegrationResultType.ACTIVITY: {
           const service = new ActivityService(

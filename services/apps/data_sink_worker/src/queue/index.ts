@@ -31,7 +31,7 @@ export class WorkerQueueReceiver extends SqsQueueReceiver {
 
   override async processMessage(message: IQueueMessage): Promise<void> {
     try {
-      this.log.trace({ messageType: message.type }, 'Processing message!')
+      this.log.info({ messageType: message.type }, 'Processing message!')
 
       const service = new DataSinkService(
         new DbStore(this.log, this.dbConn),
