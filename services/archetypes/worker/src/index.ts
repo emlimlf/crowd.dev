@@ -4,6 +4,7 @@ import { NativeConnection, Worker as TemporalWorker, bundleWorkflowCode } from '
 
 import { Config, Service } from '@crowd/archetype-standard'
 import { getDbConnection, DbStore } from '@crowd/database'
+import TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin'
 
 // List all required environment variables, grouped per "component".
 // They are in addition to the ones required by the "standard" archetype.
@@ -97,6 +98,14 @@ export class ServiceWorker extends Service {
 
       const workflowBundle = await bundleWorkflowCode({
         workflowsPath: path.resolve('./src/workflows'),
+        webpackConfigHook: (config) => {
+          if (config.resolve?.plugins === undefined) {
+            config.resolve.plugins = []
+          }
+
+          config.resolve.plugins.push(new TsconfigPathsPlugin({}))
+          return config
+        },
       })
 
       this._worker = await TemporalWorker.create({
