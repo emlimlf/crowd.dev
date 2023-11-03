@@ -18,6 +18,7 @@ const log = getServiceLogger()
 const config = SEARCH_SYNC_API_CONFIG()
 
 setImmediate(async () => {
+  log.info(`Starting search sync api!`)
   const app = express()
   const redis = await getRedisClient(REDIS_CONFIG(), true)
   const opensearch = getOpensearchClient(OPENSEARCH_CONFIG())
