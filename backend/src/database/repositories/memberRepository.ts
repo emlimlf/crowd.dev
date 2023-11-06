@@ -874,31 +874,34 @@ class MemberRepository {
   ): Promise<ActivityAggregates> {
     const transaction = SequelizeRepository.getTransaction(options)
     const seq = SequelizeRepository.getSequelize(options)
+    const currentTenant = SequelizeRepository.getCurrentTenant(options)
 
     const query = `
         SELECT
         a."memberId",
         a."segmentId",
-        count(a.id) AS "activityCount",
+        count(a.id)::integer AS "activityCount",
         max(a.timestamp) AS "lastActive",
         array_agg(DISTINCT concat(a.platform, ':', a.type)) FILTER (WHERE a.platform IS NOT NULL) AS "activityTypes",
         array_agg(DISTINCT a.platform) FILTER (WHERE a.platform IS NOT NULL) AS "activeOn",
-        count(DISTINCT a."timestamp"::date) AS "activeDaysCount",
+        count(DISTINCT a."timestamp"::date)::integer AS "activeDaysCount",
         round(avg(
             CASE WHEN (a.sentiment ->> 'sentiment'::text) IS NOT NULL THEN
                 (a.sentiment ->> 'sentiment'::text)::double precision
             ELSE
                 NULL::double precision
             END
-        )::numeric, 2) AS "averageSentiment"
+        )::numeric, 2):: float AS "averageSentiment"
         FROM activities a
         WHERE a."memberId" = :memberId
+        and a."tenantId" = :tenantId
         GROUP BY a."memberId", a."segmentId"
     `
 
     const data: ActivityAggregates[] = await seq.query(query, {
       replacements: {
         memberId,
+        tenantId: currentTenant.id,
       },
       type: QueryTypes.SELECT,
       transaction,
@@ -3191,14 +3194,13 @@ class MemberRepository {
 
     const transaction = SequelizeRepository.getTransaction(options)
 
-    const { activeOn, activityCount, activeDaysCount, averageSentiment, activityTypes } =
-      await MemberRepository.getActivityAggregates(output.id, options)
+    const activityAggregates = await MemberRepository.getActivityAggregates(output.id, options)
 
-    output.activeOn = activeOn || []
-    output.activityCount = activityCount || 0
-    output.activityTypes = activityTypes || []
-    output.activeDaysCount = activeDaysCount || 0
-    output.averageSentiment = averageSentiment || 0
+    output.activeOn = activityAggregates?.activeOn || []
+    output.activityCount = activityAggregates?.activityCount || 0
+    output.activityTypes = activityAggregates?.activityTypes || []
+    output.activeDaysCount = activityAggregates?.activeDaysCount || 0
+    output.averageSentiment = activityAggregates?.averageSentiment || 0
 
     output.lastActivity =
       (
@@ -3209,7 +3211,7 @@ class MemberRepository {
         })
       )[0]?.get({ plain: true }) ?? null
 
-    output.lastActive = output.lastActivity.timestamp ?? null
+    output.lastActive = output.lastActivity?.timestamp ?? null
 
     output.numberOfOpenSourceContributions = output.contributions?.length ?? 0
 
