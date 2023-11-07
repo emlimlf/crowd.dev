@@ -619,12 +619,10 @@ export default class IntegrationService {
       memberSyncRemote.id,
     )
 
+    const searchSyncService = new SearchSyncService(this.options)
+
     // send it to opensearch because in member.update we bypass while passing transactions
-    await SearchSyncService.triggerMemberSync(
-      this.options.currentTenant.id,
-      member.id,
-      this.options,
-    )
+    await searchSyncService.triggerMemberSync(this.options.currentTenant.id, member.id)
   }
 
   async hubspotStopSyncOrganization(payload: IHubspotManualSyncPayload) {

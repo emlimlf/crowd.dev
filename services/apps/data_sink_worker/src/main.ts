@@ -1,7 +1,7 @@
 import { getDbConnection } from '@crowd/database'
 import { getServiceTracer } from '@crowd/tracing'
 import { getServiceLogger } from '@crowd/logging'
-import { NodejsWorkerEmitter, getSqsClient, SearchSyncWorkerEmitter } from '@crowd/sqs'
+import { NodejsWorkerEmitter, SearchSyncWorkerEmitter, getSqsClient } from '@crowd/sqs'
 import {
   DB_CONFIG,
   SENTIMENT_CONFIG,
@@ -52,10 +52,10 @@ setImmediate(async () => {
     sqsClient,
     dbConnection,
     nodejsWorkerEmitter,
+    searchSyncWorkerEmitter,
     redisClient,
     unleash,
     temporal,
-    searchSyncWorkerEmitter,
     tracer,
     log,
     MAX_CONCURRENT_PROCESSING,

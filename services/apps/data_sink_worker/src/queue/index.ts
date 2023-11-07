@@ -4,9 +4,9 @@ import { DbConnection, DbStore } from '@crowd/database'
 import {
   DATA_SINK_WORKER_QUEUE_SETTINGS,
   NodejsWorkerEmitter,
+  SearchSyncWorkerEmitter,
   SqsClient,
   SqsQueueReceiver,
-  SearchSyncWorkerEmitter,
 } from '@crowd/sqs'
 import {
   CreateAndProcessActivityResultQueueMessage,
@@ -24,10 +24,10 @@ export class WorkerQueueReceiver extends SqsQueueReceiver {
     client: SqsClient,
     private readonly dbConn: DbConnection,
     private readonly nodejsWorkerEmitter: NodejsWorkerEmitter,
+    private readonly searchSyncWorkerEmitter: SearchSyncWorkerEmitter,
     private readonly redisClient: RedisClient,
     private readonly unleash: Unleash | undefined,
     private readonly temporal: TemporalClient,
-    private readonly searchSyncWorkerEmitter: SearchSyncWorkerEmitter,
     tracer: Tracer,
     parentLog: Logger,
     maxConcurrentProcessing: number,

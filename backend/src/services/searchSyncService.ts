@@ -5,20 +5,55 @@ import { FeatureFlag } from '@crowd/types'
 import { getSearchSyncApiClient } from '../utils/apiClients'
 import { getSearchSyncWorkerEmitter } from '@/serverless/utils/serviceSQS'
 import isFeatureEnabled from '@/feature-flags/isFeatureEnabled'
+import { IS_TEST_ENV } from '@/conf'
+import { IServiceOptions } from './IServiceOptions'
+
+export enum SyncMode {
+  SYNCHRONOUS = 'synchronous',
+  ASYNCHRONOUS = 'asynchronous',
+  USE_FEATURE_FLAG = 'use-feature-flag',
+}
+
+export type SearchSyncClient = SearchSyncApiClient | SearchSyncWorkerEmitter
 
 export default class SearchSyncService extends LoggerBase {
-  static async getSearchSyncClient(
-    options,
-  ): Promise<SearchSyncApiClient | SearchSyncWorkerEmitter> {
-    if (await isFeatureEnabled(FeatureFlag.SYNCHRONOUS_OPENSEARCH_UPDATES, options)) {
+  options: IServiceOptions
+
+  mode: SyncMode
+
+  constructor(options: IServiceOptions, mode: SyncMode = SyncMode.USE_FEATURE_FLAG) {
+    super(options.log)
+    this.options = options
+    this.mode = mode
+  }
+
+  async getSearchSyncClient(): Promise<SearchSyncClient> {
+    // tests can always use the async emitter
+    if (IS_TEST_ENV) {
+      return getSearchSyncWorkerEmitter()
+    }
+
+    if (this.mode === SyncMode.SYNCHRONOUS) {
       return getSearchSyncApiClient()
     }
 
-    return getSearchSyncWorkerEmitter()
+    if (this.mode === SyncMode.ASYNCHRONOUS) {
+      return getSearchSyncWorkerEmitter()
+    }
+
+    if (this.mode === SyncMode.USE_FEATURE_FLAG) {
+      if (await isFeatureEnabled(FeatureFlag.SYNCHRONOUS_OPENSEARCH_UPDATES, this.options)) {
+        return getSearchSyncApiClient()
+      }
+
+      return getSearchSyncWorkerEmitter()
+    }
+
+    throw new Error(`Unknown mode ${this.mode} !`)
   }
 
-  static async triggerMemberSync(tenantId: string, memberId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerMemberSync(tenantId: string, memberId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient) {
       await client.triggerMemberSync(memberId)
@@ -29,8 +64,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerTenantMembersSync(tenantId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerTenantMembersSync(tenantId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient || client instanceof SearchSyncWorkerEmitter) {
       await client.triggerTenantMembersSync(tenantId)
@@ -39,8 +74,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerOrganizationMembersSync(organizationId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerOrganizationMembersSync(organizationId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient || client instanceof SearchSyncWorkerEmitter) {
       await client.triggerOrganizationMembersSync(organizationId)
@@ -49,8 +84,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerRemoveMember(tenantId: string, memberId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerRemoveMember(tenantId: string, memberId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient) {
       await client.triggerRemoveMember(memberId)
@@ -61,8 +96,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerMemberCleanup(tenantId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerMemberCleanup(tenantId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient || client instanceof SearchSyncWorkerEmitter) {
       await client.triggerMemberCleanup(tenantId)
@@ -71,8 +106,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerActivitySync(tenantId: string, activityId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerActivitySync(tenantId: string, activityId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient) {
       await client.triggerActivitySync(activityId)
@@ -83,8 +118,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerTenantActivitiesSync(tenantId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerTenantActivitiesSync(tenantId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient || client instanceof SearchSyncWorkerEmitter) {
       await client.triggerTenantActivitiesSync(tenantId)
@@ -93,8 +128,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerOrganizationActivitiesSync(organizationId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerOrganizationActivitiesSync(organizationId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient || client instanceof SearchSyncWorkerEmitter) {
       await client.triggerOrganizationActivitiesSync(organizationId)
@@ -103,8 +138,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerRemoveActivity(tenantId: string, activityId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerRemoveActivity(tenantId: string, activityId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient) {
       await client.triggerRemoveActivity(activityId)
@@ -115,8 +150,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerActivityCleanup(tenantId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerActivityCleanup(tenantId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient || client instanceof SearchSyncWorkerEmitter) {
       await client.triggerActivityCleanup(tenantId)
@@ -125,8 +160,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerOrganizationSync(tenantId: string, organizationId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerOrganizationSync(tenantId: string, organizationId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient) {
       await client.triggerOrganizationSync(organizationId)
@@ -137,8 +172,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerTenantOrganizationSync(tenantId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerTenantOrganizationSync(tenantId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient || client instanceof SearchSyncWorkerEmitter) {
       await client.triggerTenantOrganizationSync(tenantId)
@@ -147,8 +182,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerRemoveOrganization(tenantId: string, organizationId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerRemoveOrganization(tenantId: string, organizationId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient) {
       await client.triggerRemoveOrganization(organizationId)
@@ -159,8 +194,8 @@ export default class SearchSyncService extends LoggerBase {
     }
   }
 
-  static async triggerOrganizationCleanup(tenantId: string, options) {
-    const client = await SearchSyncService.getSearchSyncClient(options)
+  async triggerOrganizationCleanup(tenantId: string) {
+    const client = await this.getSearchSyncClient()
 
     if (client instanceof SearchSyncApiClient || client instanceof SearchSyncWorkerEmitter) {
       await client.triggerOrganizationCleanup(tenantId)
