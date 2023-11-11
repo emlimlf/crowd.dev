@@ -24,7 +24,7 @@
           >
             <i class="ri-question-line text-lg mr-3" />
             <span v-if="!props.collapsed" class="text-sm !text-gray-900">
-              Help & support
+              Resources & support
             </span>
           </div>
         </el-tooltip>
@@ -32,10 +32,13 @@
     </template>
 
     <div class="-mb-">
-      <div class="pt-1 pb-2 px-4">
-        <p class="uppercase text-2xs font-semibold tracking-1 text-gray-400 leading-6">
-          Help & Support
+      <div class="pt-1 pb-3 px-4">
+        <p class="uppercase text-2xs font-semibold tracking-1 text-gray-400 leading-6 text-center">
+          Resources & Support
         </p>
+      </div>
+      <div class="px-3 -mx-1 border-b border-gray-100 pb-4 mb-2">
+        <cr-menu-support-help />
       </div>
       <cr-menu-links
         :collapsed="false"
@@ -70,6 +73,7 @@ import { supportMenu } from '@/modules/layout/config/menu';
 import AppSystemStatus from '@/modules/layout/components/system-status/system-status.vue';
 import { LayoutService } from '@/modules/layout/layout-service';
 import { Status } from '@/modules/layout/types/SystemStatus';
+import CrMenuSupportHelp from '@/modules/layout/components/menu/menu-support-help.vue';
 
 const props = defineProps<{
   collapsed: boolean
