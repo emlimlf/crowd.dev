@@ -49,6 +49,7 @@ export class WorkerQueueReceiver extends SqsQueueReceiver {
       async (memberIds, err) => {
         this.log.error(err, { memberIds }, 'Error while processing batch of members!')
       },
+      (elementsPerSecond) => this.log.info(`Processed ${elementsPerSecond} members/second!`),
     )
 
     this.activityBatchProcessor = new BatchProcessor(
@@ -64,6 +65,7 @@ export class WorkerQueueReceiver extends SqsQueueReceiver {
       async (activityIds, err) => {
         this.log.error(err, { activityIds }, 'Error while processing batch of activities!')
       },
+      (elementsPerSecond) => this.log.info(`Processed ${elementsPerSecond} activities/second!`),
     )
 
     this.organizationBatchProcessor = new BatchProcessor(
@@ -79,6 +81,7 @@ export class WorkerQueueReceiver extends SqsQueueReceiver {
       async (organizationIds, err) => {
         this.log.error(err, { organizationIds }, 'Error while processing batch of organizations!')
       },
+      (elementsPerSecond) => this.log.info(`Processed ${elementsPerSecond} organizations/second!`),
     )
   }
 
