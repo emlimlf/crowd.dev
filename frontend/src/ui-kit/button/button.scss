@@ -1,0 +1,305 @@
+.c-btn {
+  color: var(--lf-btn-text);
+  background: var(--lf-btn-background);
+  border: rem(1) solid var(--lf-btn-border);
+  box-shadow: var(--lf-btn-shadow);
+  font-size: var(--lf-btn-font-size);
+  line-height: var(--lf-btn-line-height);
+  padding: var(--lf-btn-padding);
+  border-radius: var(--lf-btn-border-radius);
+  height: var(--lf-btn-height);
+  @apply relative select-none transition-all whitespace-nowrap cursor-pointer outline-none text-center font-semibold inline-flex items-center justify-center gap-2;
+
+  &:hover{
+    color: var(--lf-btn-hover-text);
+    background: var(--lf-btn-hover-background);
+    border-color: var(--lf-btn-hover-border);
+  }
+
+  &:active{
+    color: var(--lf-btn-active-text);
+    background: var(--lf-btn-active-background);
+    border-color: var(--lf-btn-active-border);
+  }
+
+  &:disabled, &.is-disabled{
+    color: var(--lf-btn-disabled-text);
+    background: var(--lf-btn-disabled-background);
+    border-color: var(--lf-btn-disabled-border);
+    @apply cursor-default;
+  }
+
+  &__loader{
+    @apply animate-spin;
+  }
+
+  &.is-loading{
+    color: var(--lf-btn-loading-text);
+    background: var(--lf-btn-loading-background);
+    border-color: var(--lf-btn-loading-border);
+
+    // hide icons on loading
+    [class^="ri-"]:not(.c-btn__loader), .c-icon{
+      @apply hidden;
+    }
+  }
+
+  [class^="ri-"], .c-icon{
+    height: var(--lf-btn-icon);
+    width: var(--lf-btn-icon);
+    font-size: var(--lf-btn-icon);
+    @apply flex items-center justify-center font-normal;
+  }
+
+  /* Icon only */
+  &--icon{
+    width: var(--lf-btn-height);
+    padding: 0 !important;
+  }
+
+  /* Icon only */
+  &--icon{
+    width: var(--lf-btn-height);
+    padding: 0 !important;
+  }
+
+  /* Button Sizes */
+  &--tiny {
+    --lf-btn-font-size: var(--lf-btn-tiny-font-size);
+    --lf-btn-line-height: var(--lf-btn-tiny-line-height);
+    --lf-btn-height: var(--lf-btn-tiny-height);
+    --lf-btn-border-radius: var(--lf-btn-tiny-border-radius);
+    --lf-btn-padding: #{rem(0)} var(--lf-btn-tiny-padding);
+    --lf-btn-icon: var(--lf-btn-tiny-icon);
+  }
+
+  &--small {
+    --lf-btn-font-size: var(--lf-btn-small-font-size);
+    --lf-btn-line-height: var(--lf-btn-small-line-height);
+    --lf-btn-height: var(--lf-btn-small-height);
+    --lf-btn-border-radius: var(--lf-btn-small-border-radius);
+    --lf-btn-padding: #{rem(0)} var(--lf-btn-small-padding);
+    --lf-btn-icon: var(--lf-btn-small-icon);
+  }
+
+  &--medium {
+    --lf-btn-font-size: var(--lf-btn-medium-font-size);
+    --lf-btn-line-height: var(--lf-btn-medium-line-height);
+    --lf-btn-height: var(--lf-btn-medium-height);
+    --lf-btn-border-radius: var(--lf-btn-medium-border-radius);
+    --lf-btn-padding: #{rem(0)} var(--lf-btn-medium-padding);
+    --lf-btn-icon: var(--lf-btn-medium-icon);
+  }
+
+  &--large {
+    --lf-btn-font-size: var(--lf-btn-large-font-size);
+    --lf-btn-line-height: var(--lf-btn-large-line-height);
+    --lf-btn-height: var(--lf-btn-large-height);
+    --lf-btn-border-radius: var(--lf-btn-large-border-radius);
+    --lf-btn-padding: #{rem(0)} var(--lf-btn-large-padding);
+    --lf-btn-icon: var(--lf-btn-large-icon);
+  }
+
+  /* Button Styles */
+  &--primary {
+    --lf-btn-text: var(--lf-btn-primary-text);
+    --lf-btn-background: var(--lf-btn-primary-background);
+    --lf-btn-border: var(--lf-btn-primary-border);
+    --lf-btn-shadow: var(--lf-btn-primary-shadow);
+
+    // Hover
+    --lf-btn-hover-text: var(--lf-btn-primary-hover-text);
+    --lf-btn-hover-background: var(--lf-btn-primary-hover-background);
+    --lf-btn-hover-border: var(--lf-btn-primary-hover-border);
+
+    // Active
+    --lf-btn-active-text: var(--lf-btn-primary-active-text);
+    --lf-btn-active-background: var(--lf-btn-primary-active-background);
+    --lf-btn-active-border: var(--lf-btn-primary-active-border);
+
+    // Disabled
+    --lf-btn-disabled-text: var(--lf-btn-primary-disabled-text);
+    --lf-btn-disabled-background: var(--lf-btn-primary-disabled-background);
+    --lf-btn-disabled-border: var(--lf-btn-primary-disabled-border);
+
+    // Loading
+    --lf-btn-loading-text: var(--lf-btn-primary-loading-text);
+    --lf-btn-loading-background: var(--lf-btn-primary-loading-background);
+    --lf-btn-loading-border: var(--lf-btn-primary-loading-border);
+  }
+
+  &--secondary {
+    --lf-btn-text: var(--lf-btn-secondary-text);
+    --lf-btn-background: var(--lf-btn-secondary-background);
+    --lf-btn-border: var(--lf-btn-secondary-border);
+    --lf-btn-shadow: var(--lf-btn-secondary-shadow);
+
+    // Hover
+    --lf-btn-hover-text: var(--lf-btn-secondary-hover-text);
+    --lf-btn-hover-background: var(--lf-btn-secondary-hover-background);
+    --lf-btn-hover-border: var(--lf-btn-secondary-hover-border);
+
+    // Active
+    --lf-btn-active-text: var(--lf-btn-secondary-active-text);
+    --lf-btn-active-background: var(--lf-btn-secondary-active-background);
+    --lf-btn-active-border: var(--lf-btn-secondary-active-border);
+
+    // Disabled
+    --lf-btn-disabled-text: var(--lf-btn-secondary-disabled-text);
+    --lf-btn-disabled-background: var(--lf-btn-secondary-disabled-background);
+    --lf-btn-disabled-border: var(--lf-btn-secondary-disabled-border);
+
+    // Loading
+    --lf-btn-loading-text: var(--lf-btn-secondary-loading-text);
+    --lf-btn-loading-background: var(--lf-btn-secondary-loading-background);
+    --lf-btn-loading-border: var(--lf-btn-secondary-loading-border);
+  }
+
+  &--primary-ghost {
+    --lf-btn-text: var(--lf-btn-primary-ghost-text);
+    --lf-btn-background: var(--lf-btn-primary-ghost-background);
+    --lf-btn-border: var(--lf-btn-primary-ghost-border);
+    --lf-btn-shadow: var(--lf-btn-primary-ghost-shadow);
+
+    // Hover
+    --lf-btn-hover-text: var(--lf-btn-primary-ghost-hover-text);
+    --lf-btn-hover-background: var(--lf-btn-primary-ghost-hover-background);
+    --lf-btn-hover-border: var(--lf-btn-primary-ghost-hover-border);
+
+    // Active
+    --lf-btn-active-text: var(--lf-btn-primary-ghost-active-text);
+    --lf-btn-active-background: var(--lf-btn-primary-ghost-active-background);
+    --lf-btn-active-border: var(--lf-btn-primary-ghost-active-border);
+
+    // Disabled
+    --lf-btn-disabled-text: var(--lf-btn-primary-ghost-disabled-text);
+    --lf-btn-disabled-background: var(--lf-btn-primary-ghost-disabled-background);
+    --lf-btn-disabled-border: var(--lf-btn-primary-ghost-disabled-border);
+
+    // Loading
+    --lf-btn-loading-text: var(--lf-btn-primary-ghost-loading-text);
+    --lf-btn-loading-background: var(--lf-btn-primary-ghost-loading-background);
+    --lf-btn-loading-border: var(--lf-btn-primary-ghost-loading-border);
+  }
+
+  &--secondary-ghost {
+    --lf-btn-text: var(--lf-btn-secondary-ghost-text);
+    --lf-btn-background: var(--lf-btn-secondary-ghost-background);
+    --lf-btn-border: var(--lf-btn-secondary-ghost-border);
+    --lf-btn-shadow: var(--lf-btn-secondary-ghost-shadow);
+
+    // Hover
+    --lf-btn-hover-text: var(--lf-btn-secondary-ghost-hover-text);
+    --lf-btn-hover-background: var(--lf-btn-secondary-ghost-hover-background);
+    --lf-btn-hover-border: var(--lf-btn-secondary-ghost-hover-border);
+
+    // Active
+    --lf-btn-active-text: var(--lf-btn-secondary-ghost-active-text);
+    --lf-btn-active-background: var(--lf-btn-secondary-ghost-active-background);
+    --lf-btn-active-border: var(--lf-btn-secondary-ghost-active-border);
+
+    // Disabled
+    --lf-btn-disabled-text: var(--lf-btn-secondary-ghost-disabled-text);
+    --lf-btn-disabled-background: var(--lf-btn-secondary-ghost-disabled-background);
+    --lf-btn-disabled-border: var(--lf-btn-secondary-ghost-disabled-border);
+
+    // Loading
+    --lf-btn-loading-text: var(--lf-btn-secondary-ghost-loading-text);
+    --lf-btn-loading-background: var(--lf-btn-secondary-ghost-loading-background);
+    --lf-btn-loading-border: var(--lf-btn-secondary-ghost-loading-border);
+  }
+
+  &--secondary-ghost-light {
+    --lf-btn-text: var(--lf-btn-secondary-ghost-light-text);
+    --lf-btn-background: var(--lf-btn-secondary-ghost-light-background);
+    --lf-btn-border: var(--lf-btn-secondary-ghost-light-border);
+    --lf-btn-shadow: var(--lf-btn-secondary-ghost-light-shadow);
+
+    // Hover
+    --lf-btn-hover-text: var(--lf-btn-secondary-ghost-light-hover-text);
+    --lf-btn-hover-background: var(--lf-btn-secondary-ghost-light-hover-background);
+    --lf-btn-hover-border: var(--lf-btn-secondary-ghost-light-hover-border);
+
+    // Active
+    --lf-btn-active-text: var(--lf-btn-secondary-ghost-light-active-text);
+    --lf-btn-active-background: var(--lf-btn-secondary-ghost-light-active-background);
+    --lf-btn-active-border: var(--lf-btn-secondary-ghost-light-active-border);
+
+    // Disabled
+    --lf-btn-disabled-text: var(--lf-btn-secondary-ghost-light-disabled-text);
+    --lf-btn-disabled-background: var(--lf-btn-secondary-ghost-light-disabled-background);
+    --lf-btn-disabled-border: var(--lf-btn-secondary-ghost-light-disabled-border);
+
+    // Loading
+    --lf-btn-loading-text: var(--lf-btn-secondary-ghost-light-loading-text);
+    --lf-btn-loading-background: var(--lf-btn-secondary-ghost-light-loading-background);
+    --lf-btn-loading-border: var(--lf-btn-secondary-ghost-light-loading-border);
+  }
+
+  &--primary-link {
+    @apply p-0 h-auto border-none;
+    --lf-btn-text: var(--lf-btn-primary-link-text);
+    --lf-btn-background: var(--lf-btn-primary-link-background);
+    --lf-btn-border: var(--lf-btn-primary-link-border);
+    --lf-btn-shadow: var(--lf-btn-primary-link-shadow);
+
+    // Hover
+    --lf-btn-hover-text: var(--lf-btn-primary-link-hover-text);
+    --lf-btn-hover-background: var(--lf-btn-primary-link-hover-background);
+    --lf-btn-hover-border: var(--lf-btn-primary-link-hover-border);
+
+    // Active
+    --lf-btn-active-text: var(--lf-btn-primary-link-active-text);
+    --lf-btn-active-background: var(--lf-btn-primary-link-active-background);
+    --lf-btn-active-border: var(--lf-btn-primary-link-active-border);
+
+    // Disabled
+    --lf-btn-disabled-text: var(--lf-btn-primary-link-disabled-text);
+    --lf-btn-disabled-background: var(--lf-btn-primary-link-disabled-background);
+    --lf-btn-disabled-border: var(--lf-btn-primary-link-disabled-border);
+
+    // Loading
+    --lf-btn-loading-text: var(--lf-btn-primary-link-loading-text);
+    --lf-btn-loading-background: var(--lf-btn-primary-link-loading-background);
+    --lf-btn-loading-border: var(--lf-btn-primary-link-loading-border);
+  }
+
+  &--secondary-link {
+    @apply p-0 h-auto border-none;
+    --lf-btn-text: var(--lf-btn-secondary-link-text);
+    --lf-btn-background: var(--lf-btn-secondary-link-background);
+    --lf-btn-border: var(--lf-btn-secondary-link-border);
+    --lf-btn-shadow: var(--lf-btn-secondary-link-shadow);
+
+    // Hover
+    --lf-btn-hover-text: var(--lf-btn-secondary-link-hover-text);
+    --lf-btn-hover-background: var(--lf-btn-secondary-link-hover-background);
+    --lf-btn-hover-border: var(--lf-btn-secondary-link-hover-border);
+
+    // Active
+    --lf-btn-active-text: var(--lf-btn-secondary-link-active-text);
+    --lf-btn-active-background: var(--lf-btn-secondary-link-active-background);
+    --lf-btn-active-border: var(--lf-btn-secondary-link-active-border);
+
+    // Disabled
+    --lf-btn-disabled-text: var(--lf-btn-secondary-link-disabled-text);
+    --lf-btn-disabled-background: var(--lf-btn-secondary-link-disabled-background);
+    --lf-btn-disabled-border: var(--lf-btn-secondary-link-disabled-border);
+
+    // Loading
+    --lf-btn-loading-text: var(--lf-btn-secondary-link-loading-text);
+    --lf-btn-loading-background: var(--lf-btn-secondary-link-loading-background);
+    --lf-btn-loading-border: var(--lf-btn-secondary-link-loading-border);
+  }
+}
+
+.c-btn-group{
+  @apply flex items-start;
+
+  &>.c-btn:not(:last-child){
+    @apply rounded-r-none;
+  }
+  &>.c-btn:not(:first-child){
+    @apply rounded-l-none -ml-px;
+  }
+}

@@ -1,28 +1,41 @@
-import { MemberSyncService, OpenSearchService } from '@crowd/opensearch'
-import { DB_CONFIG, OPENSEARCH_CONFIG, REDIS_CONFIG, SERVICE_CONFIG } from '../conf'
-import { MemberRepository } from '../repo/member.repo'
-import { DbStore, getDbConnection } from '@crowd/database'
-import { getServiceLogger } from '@crowd/logging'
-import { getRedisClient } from '@crowd/redis'
 import { timeout } from '@crowd/common'
+import { DbStore, getDbConnection } from '@crowd/data-access-layer/src/database'
+import { MemberRepository } from '@crowd/data-access-layer/src/old/apps/search_sync_worker/member.repo'
+import { getServiceLogger } from '@crowd/logging'
+import { getOpensearchClient, MemberSyncService, OpenSearchService } from '@crowd/opensearch'
+import { IndexedEntityType } from '@crowd/opensearch/src/repo/indexing.data'
+import { getClientSQL } from '@crowd/questdb'
+import { IndexingRepository } from '@crowd/opensearch/src/repo/indexing.repo'
+import { getRedisClient } from '@crowd/redis'
+import { DB_CONFIG, OPENSEARCH_CONFIG, REDIS_CONFIG } from '../conf'
 
 const log = getServiceLogger()
+
+const processArguments = process.argv.slice(2)
 
 const MAX_CONCURRENT = 3
 
 setImmediate(async () => {
-  const openSearchService = new OpenSearchService(log, OPENSEARCH_CONFIG())
+  const osClient = await getOpensearchClient(OPENSEARCH_CONFIG())
+  const openSearchService = new OpenSearchService(log, osClient)
 
   const redis = await getRedisClient(REDIS_CONFIG(), true)
 
   const dbConnection = await getDbConnection(DB_CONFIG())
   const store = new DbStore(log, dbConnection)
 
-  const repo = new MemberRepository(redis, store, log)
+  if (processArguments.includes('--clean')) {
+    const indexingRepo = new IndexingRepository(store, log)
+    await indexingRepo.deleteIndexedEntities(IndexedEntityType.MEMBER)
+  }
+
+  const repo = new MemberRepository(store, log)
 
   const tenantIds = await repo.getTenantIds()
+  const qdbConn = await getClientSQL()
+  const qdbStore = new DbStore(log, qdbConn)
 
-  const service = new MemberSyncService(redis, store, openSearchService, log, SERVICE_CONFIG())
+  const service = new MemberSyncService(redis, store, qdbStore, openSearchService, log)
 
   let current = 0
   for (let i = 0; i < tenantIds.length; i++) {

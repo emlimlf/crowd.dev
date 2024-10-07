@@ -6,21 +6,26 @@ import {
 } from '@/shared/modules/filters/types/filterTypes/MultiSelectAsyncFilterConfig';
 import { MemberService } from '@/modules/member/member-service';
 import { DEFAULT_MEMBER_FILTERS } from '@/modules/member/store/constants';
+import { Member } from '@/modules/member/types/Member';
+import { storeToRefs } from 'pinia';
+import { useLfSegmentsStore } from '@/modules/lf/segments/store';
 
 const member: MultiSelectAsyncFilterConfig = {
   id: 'member',
-  label: 'Contributor',
+  label: 'Person',
   iconClass: 'ri-account-circle-line',
   type: FilterConfigType.MULTISELECT_ASYNC,
   options: {
-    remoteMethod: (query) => MemberService.listAutocomplete({
-      query,
-      limit: 10,
-    })
-      .then((data: any[]) => data.map((member) => ({
-        label: member.label,
-        value: member.id,
-      }))),
+    remoteMethod: (query) => {
+      const lsSegmentsStore = useLfSegmentsStore();
+      const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
+
+      return MemberService.listMembersAutocomplete({
+        query,
+        limit: 10,
+        segments: selectedProjectGroup.value ? [selectedProjectGroup.value.id] : null,
+      });
+    },
     remotePopulateItems: (ids: string[]) => MemberService.listMembers({
       filter: {
         and: [
@@ -34,17 +39,18 @@ const member: MultiSelectAsyncFilterConfig = {
       limit: ids.length,
       offset: 0,
     })
-      .then(({ rows }: any) => rows.map((member: any) => ({
+      .then(({ rows }: { rows: Member[] }) => rows.map((member) => ({
         label: member.displayName,
         value: member.id,
+        logo: member.attributes?.avatarUrl?.default || null,
       }))),
   },
   itemLabelRenderer(value: MultiSelectAsyncFilterValue, options: MultiSelectAsyncFilterOptions, data: any): string {
-    return itemLabelRendererByType[FilterConfigType.MULTISELECT_ASYNC]('Contributor', value, options, data);
+    return itemLabelRendererByType[FilterConfigType.MULTISELECT_ASYNC]('Person', value, options, data);
   },
   apiFilterRenderer({ value, include }: MultiSelectAsyncFilterValue): any[] {
     const filter = {
-      memberId: value,
+      memberId: { in: value },
     };
     return [
       (include ? filter : { not: filter }),

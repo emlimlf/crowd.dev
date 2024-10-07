@@ -3,7 +3,7 @@
     <div v-if="showHeader">
       <h6>Custom attributes</h6>
       <p class="text-gray-500 text-2xs leading-normal mt-1">
-        Add custom data points to enhance the contributor profile
+        Add custom data points to enhance the person profile
       </p>
       <el-button
         class="btn btn-link btn-link--sm btn-link--primary mt-3"
@@ -36,7 +36,7 @@
             "
             class="text-xs text-gray-400 font-medium mt-4 mb-2"
           >
-            Hidden in contributor
+            Hidden in profile
           </div>
           <div class="flex gap-3">
             <div
@@ -54,7 +54,7 @@
                   placement="top"
                   trigger="hover"
                 >
-                  <app-svg name="source" class="h-3 w-3" />
+                  <lf-svg name="source" class="h-3 w-3" />
                 </el-tooltip>
               </div>
               <span
@@ -176,7 +176,7 @@ import { mapActions } from '@/shared/vuex/vuex.helpers';
 import ConfirmDialog from '@/shared/dialog/confirm-dialog';
 import Message from '@/shared/message/message';
 import { MemberService } from '@/modules/member/member-service';
-import AppSvg from '@/shared/svg/svg.vue';
+import LfSvg from '@/shared/svg/svg.vue';
 import { AttributeType } from '@/modules/organization/types/Attributes';
 import { getAttributeSourceName } from '@/shared/helpers/attribute.helpers';
 

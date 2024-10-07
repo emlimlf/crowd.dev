@@ -15,6 +15,7 @@ export default {
   url: ({ username }) => (username ? `https://reddit.com/user/${username}` : null),
   chartColor: '#FF4500',
   showProfileLink: true,
+  urlPrefix: 'reddit.com/user/',
   activityDisplay: {
     showLinkToUrl: true,
   },
@@ -24,8 +25,5 @@ export default {
       copy: 'reply',
       number: conversation.activityCount - 1,
     }),
-  },
-  organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
   },
 };

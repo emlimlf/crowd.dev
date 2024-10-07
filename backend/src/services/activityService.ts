@@ -1,27 +1,51 @@
-import { Error400 } from '@crowd/common'
+import { Error400, distinct, singleOrDefault } from '@crowd/common'
+import {
+  DEFAULT_COLUMNS_TO_SELECT,
+  addActivityToConversation,
+  deleteActivities,
+  insertActivities,
+  queryActivities,
+  updateActivity,
+} from '@crowd/data-access-layer'
+import {
+  MemberField,
+  findMemberById,
+  queryMembersAdvanced,
+} from '@crowd/data-access-layer/src/members'
+import { optionsQx } from '@crowd/data-access-layer/src/queryExecutor'
+import { ActivityDisplayService } from '@crowd/integrations'
 import { LoggerBase, logExecutionTime } from '@crowd/logging'
 import { WorkflowIdReusePolicy } from '@crowd/temporal'
-import { PlatformType, SyncMode, TemporalWorkflowId, SegmentData } from '@crowd/types'
+import {
+  IMemberIdentity,
+  IntegrationResultType,
+  PlatformType,
+  SegmentData,
+  TemporalWorkflowId,
+} from '@crowd/types'
 import { Blob } from 'buffer'
 import vader from 'crowd-sentiment'
 import { Transaction } from 'sequelize/types'
+import OrganizationRepository from '@/database/repositories/organizationRepository'
+import { IRepositoryOptions } from '@/database/repositories/IRepositoryOptions'
 import { GITHUB_CONFIG, IS_DEV_ENV, IS_TEST_ENV, TEMPORAL_CONFIG } from '../conf'
 import ActivityRepository from '../database/repositories/activityRepository'
-import MemberAttributeSettingsRepository from '../database/repositories/memberAttributeSettingsRepository'
 import MemberRepository from '../database/repositories/memberRepository'
 import SegmentRepository from '../database/repositories/segmentRepository'
 import SequelizeRepository from '../database/repositories/sequelizeRepository'
-import { mapUsernameToIdentities } from '../database/repositories/types/memberTypes'
+import {
+  UsernameIdentities,
+  mapUsernameToIdentities,
+} from '../database/repositories/types/memberTypes'
 import telemetryTrack from '../segment/telemetryTrack'
 import { IServiceOptions } from './IServiceOptions'
 import { detectSentiment, detectSentimentBatch } from './aws'
 import ConversationService from './conversationService'
-import ConversationSettingsService from './conversationSettingsService'
 import merge from './helpers/merge'
 import MemberAffiliationService from './memberAffiliationService'
-import MemberService from './memberService'
 import SearchSyncService from './searchSyncService'
 import SegmentService from './segmentService'
+import { getDataSinkWorkerEmitter } from '@/serverless/utils/queueService'
 
 const IS_GITHUB_COMMIT_DATA_ENABLED = GITHUB_CONFIG.isCommitDataEnabled === 'true'
 
@@ -84,7 +108,11 @@ export default class ActivityService extends LoggerBase {
       // If a sourceParentId is sent, try to find it in our db
       if ('sourceParentId' in data && data.sourceParentId) {
         const parent = await ActivityRepository.findOne(
-          { sourceId: data.sourceParentId },
+          {
+            filter: {
+              and: [{ sourceId: { eq: data.sourceParentId } }],
+            },
+          },
           repositoryOptions,
         )
         if (parent) {
@@ -119,6 +147,7 @@ export default class ActivityService extends LoggerBase {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           organizationId: (oldValue, _newValue) => oldValue,
         })
+        await updateActivity(this.options.qdb, id, toUpdate)
         record = await ActivityRepository.update(id, toUpdate, repositoryOptions)
         if (data.parent) {
           await this.addToConversation(record.id, data.parent, transaction)
@@ -135,7 +164,8 @@ export default class ActivityService extends LoggerBase {
             // we have some custom platform types in db that are not in enum
             !Object.values(PlatformType).includes(data.platform))
         ) {
-          const { displayName } = await MemberRepository.findById(data.member, repositoryOptions)
+          const qx = SequelizeRepository.getQueryExecutor(repositoryOptions, transaction)
+          const { displayName } = await findMemberById(qx, data.member, [MemberField.DISPLAY_NAME])
           // Get the first key of the username object as a string
           data.username = displayName
         }
@@ -147,6 +177,7 @@ export default class ActivityService extends LoggerBase {
         )
 
         record = await ActivityRepository.create(data, repositoryOptions)
+        await insertActivities([{ ...data, id: record.id }])
 
         // Only track activity's platform and timestamp and memberId. It is completely annonymous.
         telemetryTrack(
@@ -167,13 +198,39 @@ export default class ActivityService extends LoggerBase {
           record = await this.addToConversation(record.id, data.parent, transaction)
         } else if ('sourceId' in data && data.sourceId) {
           // if it's not a child, it may be a parent of previously added activities
-          const children = await ActivityRepository.findAndCountAll(
-            { filter: { sourceParentId: data.sourceId } },
-            repositoryOptions,
+          const children = await queryActivities(
+            repositoryOptions.qdb,
+            {
+              tenantId: record.tenantId,
+              segmentIds: [record.segmentId],
+              filter: { and: [{ sourceParentId: { eq: data.sourceId } }] },
+            },
+            DEFAULT_COLUMNS_TO_SELECT,
           )
+
+          const memberIds = distinct(children.rows.map((c) => c.memberId))
+          if (memberIds.length > 0) {
+            const memberResults = await queryMembersAdvanced(
+              optionsQx(repositoryOptions),
+              repositoryOptions.redis,
+              repositoryOptions.currentTenant.id,
+              {
+                filter: { and: [{ id: { in: memberIds } }] },
+                limit: memberIds.length,
+              },
+            )
+
+            for (const activity of children.rows) {
+              const member = singleOrDefault(memberResults.rows, (m) => m.id === activity.memberId)
+              if (member) {
+                activity.member = member
+              }
+            }
+          }
 
           for (const child of children.rows) {
             // update children with newly created parentId
+            await updateActivity(this.options.qdb, child.id, { ...record, parentId: record.id })
             await ActivityRepository.update(child.id, { parent: record.id }, repositoryOptions)
 
             // manage conversations for each child
@@ -185,8 +242,9 @@ export default class ActivityService extends LoggerBase {
       await SequelizeRepository.commitTransaction(transaction)
 
       if (fireSync) {
-        await searchSyncService.triggerMemberSync(this.options.currentTenant.id, record.memberId)
-        await searchSyncService.triggerActivitySync(this.options.currentTenant.id, record.id)
+        await searchSyncService.triggerMemberSync(this.options.currentTenant.id, record.memberId, {
+          withAggs: true,
+        })
       }
 
       if (!existing && fireCrowdWebhooks) {
@@ -393,7 +451,6 @@ export default class ActivityService extends LoggerBase {
    */
 
   async addToConversation(id: string, parentId: string, transaction: Transaction) {
-    const searchSyncService = new SearchSyncService(this.options)
     const parent = await ActivityRepository.findById(parentId, { ...this.options, transaction })
     const child = await ActivityRepository.findById(id, { ...this.options, transaction })
     const conversationService = new ConversationService({
@@ -438,27 +495,16 @@ export default class ActivityService extends LoggerBase {
         { conversationId: conversation.id },
         { ...this.options, transaction },
       )
-      await searchSyncService.triggerActivitySync(this.options.currentTenant.id, parent.id)
+      await addActivityToConversation(this.options.qdb, parent.id, conversation.id)
     } else {
       // neither child nor parent is in a conversation, create one from parent
       const conversationTitle = await conversationService.generateTitle(
         parent.title || parent.body,
         ActivityService.hasHtmlActivities(parent.platform),
       )
-      const conversationSettings = await ConversationSettingsService.findOrCreateDefault(
-        this.options,
-      )
-      const channel = ConversationService.getChannelFromActivity(parent)
-
-      const published = ConversationService.shouldAutoPublishConversation(
-        conversationSettings,
-        parent.platform,
-        channel,
-      )
-
       conversation = await conversationService.create({
         title: conversationTitle,
-        published,
+        published: false,
         slug: await conversationService.generateSlug(conversationTitle),
         platform: parent.platform,
       })
@@ -467,7 +513,6 @@ export default class ActivityService extends LoggerBase {
         { conversationId: conversation.id },
         { ...this.options, transaction },
       )
-      await searchSyncService.triggerActivitySync(this.options.currentTenant.id, parentId)
       record = await ActivityRepository.update(
         id,
         { conversationId: conversation.id },
@@ -485,187 +530,99 @@ export default class ActivityService extends LoggerBase {
    * @returns The existing activity if it exists, false otherwise
    */
   async _activityExists(data, transaction) {
+    const options: IRepositoryOptions = { ...this.options, transaction }
     // An activity is unique by it's sourceId and tenantId
     const exists = await ActivityRepository.findOne(
       {
-        sourceId: data.sourceId,
+        filter: {
+          and: [{ sourceId: { eq: data.sourceId } }],
+        },
       },
-      {
-        ...this.options,
-        transaction,
-      },
+      options,
     )
     return exists || false
   }
 
-  async createWithMember(data, fireCrowdWebhooks: boolean = true) {
+  async createWithMember(data) {
     const logger = this.options.log
-    const searchSyncService = new SearchSyncService(this.options, SyncMode.ASYNCHRONOUS)
-
-    const errorDetails: any = {}
-
-    const transaction = await SequelizeRepository.createTransaction(this.options)
-    const memberService = new MemberService(this.options)
+    const dataSinkWorkerEmitter = await getDataSinkWorkerEmitter()
 
     try {
       data.member.username = mapUsernameToIdentities(data.member.username, data.platform)
 
-      const platforms = Object.keys(data.member.username)
-      if (platforms.length === 0) {
-        throw new Error('Member must have at least one platform username set!')
-      }
-
       if (!data.username) {
-        data.username = data.member.username[data.platform][0].username
+        data.username = data.member.username[data.platform][0].value
       }
 
       logger.trace(
         { type: data.type, platform: data.platform, username: data.username },
-        'Creating activity with member!',
+        'Processing activity with member!',
       )
 
-      let activityExists = await this._activityExists(data, transaction)
+      data.member.identities = ActivityService.processMemberIdentities(data.member, data.platform)
+      data.isContribution = data.isContribution || false
 
-      let existingMember = activityExists
-        ? await memberService.findById(activityExists.memberId, true, false)
-        : false
+      // prepare objectMember for dataSinkWorker
+      if (data.objectMember) {
+        data.objectMember.username = mapUsernameToIdentities(
+          data.objectMember.username,
+          data.platform,
+        )
 
-      if (existingMember) {
-        // let's look just in case for an existing member and if they are different we should log them because they will probably fail to insert
-        const tempExisting = await memberService.memberExists(data.member.username, data.platform)
-
-        if (!tempExisting) {
-          logger.warn(
-            {
-              existingMemberId: existingMember.id,
-              username: data.username,
-              platform: data.platform,
-              activityType: data.type,
-            },
-            'We have found an existing member but actually we could not find him by username and platform!',
-          )
-          errorDetails.reason = 'activity_service_createWithMember_existing_member_not_found'
-          errorDetails.details = {
-            existingMemberId: existingMember.id,
-            existingActivityId: activityExists.id,
-            username: data.username,
-            platform: data.platform,
-            activityType: data.type,
-          }
-        } else if (existingMember.id !== tempExisting.id) {
-          logger.warn(
-            {
-              existingMemberId: existingMember.id,
-              actualExistingMemberId: tempExisting.id,
-              existingActivityId: activityExists.id,
-              username: data.username,
-              platform: data.platform,
-              activityType: data.type,
-            },
-            'We found a member with the same username and platform but different id! Deleting the activity and continuing as if the activity did not exist.',
-          )
-
-          await ActivityRepository.destroy(activityExists.id, this.options, true)
-          await searchSyncService.triggerRemoveActivity(
-            this.options.currentTenant.id,
-            activityExists.id,
-          )
-          activityExists = false
-          existingMember = false
+        if (!data.objectMember.username[data.platform]) {
+          throw new Error(`objectMember username for ${data.platform} is missing!`)
         }
+
+        data.objectMemberUsername = data.objectMember.username[data.platform][0].value
+        data.objectMember.identities = ActivityService.processMemberIdentities(
+          data.objectMember,
+          data.platform,
+        )
       }
 
-      const member = await memberService.upsert(
+      if (data.member.organizations) {
+        data.member.organizations.forEach((org) => {
+          org.identities = [
+            {
+              name: org.name || org.website,
+              platform: data.platform,
+            },
+          ]
+        })
+      }
+
+      // TODO:: Make a proper GDPR prevention
+      if (
+        data.member.identities &&
+        data.member.identities.length > 0 &&
+        data.member.identities.some((i) => i.value.toLowerCase() === 'lf_disabled@oesterle.dev')
+      ) {
+        return
+      }
+
+      const resultId = await ActivityRepository.createResults(
         {
-          ...data.member,
-          platform: data.platform,
-          joinedAt: activityExists ? activityExists.timestamp : data.timestamp,
+          type: IntegrationResultType.ACTIVITY,
+          data,
         },
-        existingMember,
-        fireCrowdWebhooks,
-        false,
+        this.options,
       )
 
-      if (data.objectMember) {
-        if (typeof data.objectMember.username === 'string') {
-          data.objectMember.username = {
-            [data.platform]: {
-              username: data.objectMember.username,
-            },
-          }
-        }
+      logger.trace(
+        { type: data.type, platform: data.platform, username: data.username, processedData: data },
+        'Sending activity with member to data-sink-worker!',
+      )
 
-        const objectMemberPlatforms = Object.keys(data.objectMember.username)
-
-        if (objectMemberPlatforms.length === 0) {
-          throw new Error('Object member must have at least one platform username set!')
-        }
-
-        for (const platform of objectMemberPlatforms) {
-          if (typeof data.objectMember.username[platform] === 'string') {
-            data.objectMember.username[platform] = {
-              username: data.objectMember.username[platform],
-            }
-          }
-        }
-
-        const objectMember = await memberService.upsert(
-          {
-            ...data.objectMember,
-            platform: data.platform,
-            joinedAt: data.timestamp,
-          },
-          false,
-          fireCrowdWebhooks,
-        )
-
-        if (!data.objectMemberUsername) {
-          data.objectMemberUsername = data.objectMember.username[data.platform].username
-        }
-
-        data.objectMember = objectMember.id
-      }
-
-      data.member = member.id
-
-      const memberAffilationService = new MemberAffiliationService(this.options)
-      data.organizationId = await memberAffilationService.findAffiliation(member.id, data.timestamp)
-
-      const record = await this.upsert(data, activityExists, fireCrowdWebhooks, false)
-
-      await SequelizeRepository.commitTransaction(transaction)
-
-      await searchSyncService.triggerMemberSync(this.options.currentTenant.id, record.memberId)
-      await searchSyncService.triggerActivitySync(this.options.currentTenant.id, record.id)
-
-      if (data.objectMember) {
-        await searchSyncService.triggerMemberSync(this.options.currentTenant.id, data.objectMember)
-      }
-
-      return record
+      await dataSinkWorkerEmitter.triggerResultProcessing(
+        this.options.currentTenant.id,
+        data.platform,
+        resultId,
+        resultId,
+        true,
+      )
     } catch (error) {
-      const reason = errorDetails.reason || undefined
-      const details = errorDetails.details || undefined
-
-      if (error.name && error.name.includes('Sequelize') && error.original) {
-        this.log.error(
-          error,
-          {
-            query: error.sql,
-            errorMessage: error.original.message,
-            reason,
-            details,
-          },
-          'Error during activity create with member!',
-        )
-      } else {
-        this.log.error(error, { reason, details }, 'Error during activity create with member!')
-      }
-      await SequelizeRepository.rollbackTransaction(transaction)
-
-      SequelizeRepository.handleUniqueFieldError(error, this.options.language, 'activity')
-
-      throw { ...error, reason, details }
+      this.log.error(error, 'Error during activity create with member!')
+      throw error
     }
   }
 
@@ -693,8 +650,9 @@ export default class ActivityService extends LoggerBase {
 
       await SequelizeRepository.commitTransaction(transaction)
 
-      await searchSyncService.triggerActivitySync(this.options.currentTenant.id, record.id)
-      await searchSyncService.triggerMemberSync(this.options.currentTenant.id, record.memberId)
+      await searchSyncService.triggerMemberSync(this.options.currentTenant.id, record.memberId, {
+        withAggs: true,
+      })
       return record
     } catch (error) {
       if (error.name && error.name.includes('Sequelize')) {
@@ -718,11 +676,10 @@ export default class ActivityService extends LoggerBase {
   }
 
   async destroyAll(ids) {
-    const searchSyncService = new SearchSyncService(this.options)
-
     const transaction = await SequelizeRepository.createTransaction(this.options)
 
     try {
+      await deleteActivities(this.options.qdb, ids)
       for (const id of ids) {
         await ActivityRepository.destroy(id, {
           ...this.options,
@@ -734,10 +691,6 @@ export default class ActivityService extends LoggerBase {
     } catch (error) {
       await SequelizeRepository.rollbackTransaction(transaction)
       throw error
-    }
-
-    for (const id of ids) {
-      await searchSyncService.triggerRemoveActivity(this.options.currentTenant.id, id)
     }
   }
 
@@ -776,26 +729,119 @@ export default class ActivityService extends LoggerBase {
     )
   }
 
-  async findAllAutocomplete(search, limit) {
-    return ActivityRepository.findAllAutocomplete(search, limit, this.options)
-  }
-
-  async findAndCountAll(args) {
-    return ActivityRepository.findAndCountAll(args, this.options)
-  }
-
   async query(data) {
-    const memberAttributeSettings = (
-      await MemberAttributeSettingsRepository.findAndCountAll({}, this.options)
-    ).rows
-    const advancedFilter = data.filter
-    const orderBy = data.orderBy
+    const filter = data.filter
+    const orderBy = Array.isArray(data.orderBy) ? data.orderBy : [data.orderBy]
     const limit = data.limit
     const offset = data.offset
-    return ActivityRepository.findAndCountAll(
-      { advancedFilter, orderBy, limit, offset, attributesSettings: memberAttributeSettings },
-      this.options,
+    const countOnly = data.countOnly ?? false
+
+    const tenantId = SequelizeRepository.getCurrentTenant(this.options).id
+    const segmentIds = SequelizeRepository.getSegmentIds(this.options)
+
+    const page = await queryActivities(
+      this.options.qdb,
+      {
+        tenantId,
+        segmentIds,
+        filter,
+        orderBy,
+        limit,
+        offset,
+        countOnly,
+      },
+      DEFAULT_COLUMNS_TO_SELECT,
     )
+
+    const parentIds: string[] = []
+    const memberIds: string[] = []
+    const organizationIds: string[] = []
+    for (const row of page.rows) {
+      ;(row as any).display = ActivityDisplayService.getDisplayOptions(
+        row,
+        SegmentRepository.getActivityTypes(this.options),
+      )
+
+      if (row.parentId && !parentIds.includes(row.parentId)) {
+        parentIds.push(row.parentId)
+      }
+
+      if (row.memberId && !memberIds.includes(row.memberId)) {
+        memberIds.push(row.memberId)
+      }
+
+      if (row.objectMemberId && !memberIds.includes(row.objectMemberId)) {
+        memberIds.push(row.objectMemberId)
+      }
+
+      if (row.organizationId && !organizationIds.includes(row.organizationId)) {
+        organizationIds.push(row.organizationId)
+      }
+    }
+
+    const promises = []
+    if (organizationIds.length > 0) {
+      promises.push(
+        OrganizationRepository.findAndCountAll(
+          {
+            filter: {
+              and: [{ id: { in: organizationIds } }],
+            },
+            limit: organizationIds.length,
+            include: { identities: true, lfxMemberships: true },
+          },
+          this.options,
+        ).then((organizations) => {
+          for (const row of page.rows.filter((r) => r.organizationId)) {
+            ;(row as any).organization = singleOrDefault(
+              organizations.rows,
+              (o) => o.id === row.organizationId,
+            )
+          }
+        }),
+      )
+    }
+    if (parentIds.length > 0) {
+      promises.push(
+        queryActivities(this.options.qdb, {
+          filter: {
+            and: [{ id: { in: parentIds } }],
+          },
+          tenantId,
+          segmentIds,
+          noLimit: true,
+        }).then((activities) => {
+          for (const row of page.rows.filter((r) => r.parentId)) {
+            ;(row as any).parent = singleOrDefault(activities.rows, (a) => a.id === row.parentId)
+          }
+        }),
+      )
+    }
+    if (memberIds.length > 0) {
+      promises.push(
+        queryMembersAdvanced(
+          optionsQx(this.options),
+          this.options.redis,
+          this.options.currentTenant.id,
+          {
+            filter: { and: [{ id: { in: memberIds } }] },
+            limit: memberIds.length,
+          },
+        ).then((members) => {
+          for (const row of page.rows) {
+            row.member = singleOrDefault(members.rows, (m) => m.id === row.memberId)
+
+            if (row.objectMemberId) {
+              row.objectMember = singleOrDefault(members.rows, (m) => m.id === row.objectMemberId)
+            }
+          }
+        }),
+      )
+    }
+
+    await Promise.all(promises)
+
+    return page
   }
 
   async import(data, importHash) {
@@ -815,10 +861,12 @@ export default class ActivityService extends LoggerBase {
     return this.upsert(dataToCreate)
   }
 
-  async _isImportHashExistent(importHash) {
-    const count = await ActivityRepository.count(
+  async _isImportHashExistent(importHash: string) {
+    const count = await ActivityRepository.findOne(
       {
-        importHash,
+        filter: {
+          and: [{ importHash: { eq: importHash } }],
+        },
       },
       this.options,
     )
@@ -833,5 +881,39 @@ export default class ActivityService extends LoggerBase {
       default:
         return false
     }
+  }
+
+  static processMemberIdentities(
+    member: {
+      username: UsernameIdentities
+      emails: string[]
+    },
+    platform: string,
+  ): IMemberIdentity[] {
+    const identities = []
+
+    if (member.username) {
+      Object.keys(member.username).forEach((platform) => {
+        identities.push({
+          platform,
+          value: member.username[platform][0].value,
+          type: member.username[platform][0].type,
+          verified: true,
+        })
+      })
+    }
+
+    if (member.emails) {
+      member.emails.forEach((email) => {
+        identities.push({
+          platform,
+          value: email,
+          type: 'email',
+          verified: true,
+        })
+      })
+    }
+
+    return identities
   }
 }

@@ -24,31 +24,32 @@
       :class="{ 'bg-gray-50': props.isPrimary }"
     >
       <!-- primary member -->
-      <div class="h-13 flex justify-between items-start">
-        <div
-          v-if="props.isPreview"
-          class="bg-brand-800 rounded-full py-0.5 px-2 text-white inline-block text-xs leading-5 font-medium"
-        >
-          Preview
+      <slot name="header">
+        <div class="h-13 flex justify-between items-start">
+          <div
+            v-if="props.isPreview"
+            class="bg-primary-800 rounded-full py-0.5 px-2 text-white inline-block text-xs leading-5 font-medium"
+          >
+            Preview
+          </div>
+          <div
+            v-else-if="props.isPrimary"
+            class="bg-primary-100 rounded-full py-0.5 px-2 text-primary-800 inline-block text-xs leading-5 font-medium"
+          >
+            Primary profile
+          </div>
+          <button
+            v-else
+            type="button"
+            class="btn btn--secondary btn--sm leading-5 !px-4 !py-1"
+            @click="emit('makePrimary')"
+          >
+            <span class="ri-arrow-left-right-fill text-base text-gray-600 mr-2" />
+            <span>Make primary</span>
+          </button>
+          <slot name="action" />
         </div>
-        <div
-          v-else-if="props.isPrimary"
-          class="bg-brand-100 rounded-full py-0.5 px-2 text-brand-800 inline-block text-xs leading-5 font-medium"
-        >
-          Primary contributor
-        </div>
-        <button
-          v-else
-          :disabled="isEditLockedForSampleData"
-          type="button"
-          class="btn btn--secondary btn--sm leading-5 !px-4 !py-1"
-          @click="emit('makePrimary')"
-        >
-          <span class="ri-arrow-left-right-fill text-base text-gray-600 mr-2" />
-          <span>Make primary</span>
-        </button>
-        <slot name="action" />
-      </div>
+      </slot>
       <div class="flex justify-between">
         <router-link
           v-if="!isPreview"
@@ -65,8 +66,8 @@
               class="mb-3"
             />
             <el-tooltip
-              v-if="member.attributes?.avatarUrl?.default && getAttributeSourceName(member.attributes.avatarUrl)"
-              :content="`Source: ${getAttributeSourceName(member.attributes.avatarUrl)}`"
+              v-if="member.attributes?.avatarUrl?.default && getAttributeSourceName(member.attributes?.avatarUrl)"
+              :content="`Source: ${getAttributeSourceName(member.attributes?.avatarUrl)}`"
               placement="top"
               trigger="hover"
             >
@@ -77,7 +78,7 @@
                   'bg-gray-50': props.isPrimary,
                 }"
               >
-                <app-svg name="source" class="h-3 w-3" />
+                <lf-svg name="source" class="h-3 w-3" />
               </div>
             </el-tooltip>
           </div>
@@ -88,7 +89,7 @@
           class="mb-3"
         />
       </div>
-      <div class="pb-4">
+      <div class="pb-6">
         <router-link
           v-if="!isPreview"
           :to="{
@@ -99,45 +100,45 @@
           target="_blank"
         >
           <h6
-            class="text-base text-black font-semibold hover:text-brand-500"
+            class="text-base text-black font-semibold hover:text-primary-500"
             v-html="$sanitize(member.displayName)"
           />
         </router-link>
         <h6
           v-else
-          class="text-base text-black font-semibold"
+          class="text-base text-black font-semibold leading-6"
           v-html="$sanitize(member.displayName)"
         />
         <div class="flex items-center">
           <div
-            v-if="member.attributes.bio?.default"
+            v-if="member.attributes?.bio?.default"
             ref="bio"
-            class="text-gray-600 leading-5 !text-xs merge-member-bio"
+            class="text-gray-600 leading-5 !text-xs merge-member-bio mt-2"
             :class="{ 'line-clamp-2': !more }"
-            v-html="$sanitize(member.attributes.bio.default)"
+            v-html="$sanitize(member.attributes?.bio.default)"
           />
           <div
-            v-else-if="compareMember?.attributes.bio?.default"
+            v-else-if="compareMember?.attributes?.bio?.default"
             ref="bio"
-            class="text-transparent invisible leading-5 !text-xs merge-member-bio line-clamp-2"
-            v-html="$sanitize(compareMember?.attributes.bio.default)"
+            class="text-transparent invisible leading-5 !text-xs merge-member-bio line-clamp-2 mt-2"
+            v-html="$sanitize(compareMember?.attributes?.bio.default)"
           />
           <el-tooltip
-            v-if="!isPreview && member.attributes?.bio?.default && getAttributeSourceName(member.attributes.bio)"
-            :content="`Source: ${getAttributeSourceName(member.attributes.bio)}`"
+            v-if="!isPreview && member.attributes?.bio?.default && getAttributeSourceName(member.attributes?.bio)"
+            :content="`Source: ${getAttributeSourceName(member.attributes?.bio)}`"
             placement="top"
             trigger="hover"
           >
             <div class="ml-1">
-              <app-svg name="source" class="h-3 w-3" />
+              <lf-svg name="source" class="h-3 w-3" />
             </div>
           </el-tooltip>
         </div>
 
         <div
           v-if="displayShowMore"
-          class="text-sm text-brand-500 mt-2 cursor-pointer"
-          :class="{ invisible: !member.attributes.bio?.default }"
+          class="text-sm text-primary-500 mt-2 cursor-pointer"
+          :class="{ invisible: !member.attributes?.bio?.default }"
           @click.stop="more = !more"
         >
           Show {{ more ? 'less' : 'more' }}
@@ -145,89 +146,92 @@
       </div>
 
       <div>
-        <article
-          class="flex items-center justify-between h-12 border-b border-gray-200"
-        >
-          <p class="text-2xs font-medium text-gray-500 pr-4">
+        <article class="pb-4">
+          <p class="text-2xs font-medium text-gray-500 pb-1">
             Engagement level
           </p>
-          <app-community-engagement-level :member="member" />
+          <slot name="engagementLevel">
+            <app-community-engagement-level v-if="member.reach?.total >= 0 && member.score" :member="member" />
+            <span v-else class="text-2xs">-</span>
+          </slot>
         </article>
         <article
           v-if="
-            member.attributes.location?.default
-              || compareMember?.attributes.location?.default
+            member.attributes?.location?.default
+              || compareMember?.attributes?.location?.default
           "
-          class="flex items-center justify-between h-12 border-b border-gray-200"
+          class="pb-4"
         >
-          <div class="flex items-center pr-4">
-            <p class="text-2xs font-medium text-gray-500 pr-1">
+          <div class="flex items-center pb-1">
+            <p class="text-2xs font-medium text-gray-500 mr-1">
               Location
             </p>
             <el-tooltip
-              v-if="!isPreview && member.attributes?.location?.default && getAttributeSourceName(member.attributes.location)"
-              :content="`Source: ${getAttributeSourceName(member.attributes.location)}`"
+              v-if="!isPreview && member.attributes?.location?.default && getAttributeSourceName(member.attributes?.location)"
+              :content="`Source: ${getAttributeSourceName(member.attributes?.location)}`"
               placement="top"
               trigger="hover"
             >
-              <app-svg name="source" class="h-3 w-3" />
+              <lf-svg name="source" class="h-3 w-3" />
             </el-tooltip>
           </div>
-          <p class="text-xs text-gray-900 text-right whitespace-normal">
-            {{ member.attributes.location?.default || '-' }}
+          <p class="text-xs text-gray-900 whitespace-normal">
+            {{ member.attributes?.location?.default || '-' }}
           </p>
         </article>
         <article
           v-if="
-            member.organizations.length || compareMember?.organizations.length
+            member.organizations?.length || compareMember?.organizations?.length
           "
-          class="flex items-center justify-between min-h-12 border-b border-gray-200 py-2"
+          class="pb-4"
         >
-          <p class="text-2xs font-medium text-gray-500 pr-4">
+          <p class="text-2xs font-medium text-gray-500 pb-1">
             Organization
           </p>
-          <app-member-organizations :member="member" :show-title="false" />
+          <div>
+            <app-member-organizations :member="member" :show-title="false" />
+          </div>
         </article>
         <article
           v-if="
-            member.attributes.jobTitle?.default
-              || compareMember?.attributes.jobTitle?.default
+            member.attributes?.jobTitle?.default
+              || compareMember?.attributes?.jobTitle?.default
           "
-          class="flex items-center justify-between h-12 border-b border-gray-200"
+          class="pb-4"
         >
-          <div class="flex items-center pr-4">
+          <div class="flex items-center pb-1">
             <p class="text-2xs font-medium text-gray-500 pr-1">
               Title
             </p>
             <el-tooltip
-              v-if="!isPreview && member.attributes?.jobTitle?.default && getAttributeSourceName(member.attributes.jobTitle)"
-              :content="`Source: ${getAttributeSourceName(member.attributes.jobTitle)}`"
+              v-if="!isPreview && member.attributes?.jobTitle?.default && getAttributeSourceName(member.attributes?.jobTitle)"
+              :content="`Source: ${getAttributeSourceName(member.attributes?.jobTitle)}`"
               placement="top"
               trigger="hover"
             >
-              <app-svg name="source" class="h-3 w-3" />
+              <lf-svg name="source" class="h-3 w-3" />
             </el-tooltip>
           </div>
-          <p class="text-xs text-gray-900 text-right  whitespace-normal">
-            {{ member.attributes.jobTitle?.default || '-' }}
+          <p class="text-xs text-gray-900 whitespace-normal">
+            {{ member.attributes?.jobTitle?.default || '-' }}
           </p>
         </article>
         <article
           v-if="member.joinedAt || compareMember?.joinedAt"
-          class="flex items-center justify-between h-12 border-b border-gray-200"
+          class="pb-4"
         >
-          <p class="text-2xs font-medium text-gray-500 pr-4">
-            Contributor since
+          <p class="text-2xs font-medium text-gray-500 pb-1">
+            Joined date
           </p>
-          <p class="text-xs text-gray-900 text-right whitespace-normal">
+          <p class="text-xs text-gray-900 whitespace-normal">
             {{ moment(member.joinedAt).format('YYYY-MM-DD') }}
           </p>
         </article>
         <article
           v-if="member.tags.length > 0 || compareMember?.tags.length > 0"
-          class="flex items-center justify-between h-12 border-b border-gray-200"
+          class="pb-4"
         >
-          <p class="text-2xs font-medium text-gray-500 pr-4">
+          <p class="text-2xs font-medium text-gray-500 pb-1">
             Tags
           </p>
           <app-tags
@@ -238,21 +242,37 @@
           />
           <span v-else>-</span>
         </article>
+        <article
+          v-if="member.activityCount > 0"
+          class="pb-4"
+        >
+          <p class="text-2xs font-medium text-gray-500 pb-1">
+            Activity Count
+          </p>
+          <p class="text-xs text-gray-900 whitespace-normal">
+            {{ member.activityCount || 0 }}
+          </p>
+        </article>
+        <slot name="property" />
       </div>
-      <div class="pt-5">
+      <div class="pt-4">
+        <h6 class="text-sm font-semibold text-black pb-3">
+          Identities
+        </h6>
         <app-identities-vertical-list-members
           :member="member"
           :order="memberOrder.suggestions"
           :include-emails="true"
         />
       </div>
+      <slot name="below" />
     </div>
   </section>
 </template>
 
 <script setup>
 import {
-  computed, defineProps, onMounted, ref, defineExpose,
+  onMounted, ref,
 } from 'vue';
 import moment from 'moment';
 import AppMemberOrganizations from '@/modules/member/components/member-organizations.vue';
@@ -260,13 +280,11 @@ import AppAvatar from '@/shared/avatar/avatar.vue';
 import AppCommunityEngagementLevel from '@/modules/member/components/member-engagement-level.vue';
 import AppTags from '@/modules/tag/components/tag-list.vue';
 import AppLoading from '@/shared/loading/loading-placeholder.vue';
-import { MemberPermissions } from '@/modules/member/member-permissions';
-import { mapGetters } from '@/shared/vuex/vuex.helpers';
 import memberOrder from '@/shared/modules/identities/config/identitiesOrder/member';
 import AppIdentitiesVerticalListMembers from '@/shared/modules/identities/components/identities-vertical-list-members.vue';
 import { storeToRefs } from 'pinia';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
-import AppSvg from '@/shared/svg/svg.vue';
+import LfSvg from '@/shared/svg/svg.vue';
 import { getAttributeSourceName } from '@/shared/helpers/attribute.helpers';
 
 const props = defineProps({
@@ -303,15 +321,8 @@ const props = defineProps({
 
 const emit = defineEmits(['makePrimary', 'bioHeight']);
 
-const { currentTenant, currentUser } = mapGetters('auth');
-
 const lsSegmentsStore = useLfSegmentsStore();
 const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
-
-const isEditLockedForSampleData = computed(
-  () => new MemberPermissions(currentTenant.value, currentUser.value)
-    .editLockedForSampleData,
-);
 
 const bio = ref(null);
 const displayShowMore = ref(null);

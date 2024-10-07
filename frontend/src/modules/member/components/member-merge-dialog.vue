@@ -2,7 +2,7 @@
   <app-dialog
     v-if="isModalOpen"
     v-model="isModalOpen"
-    title="Merge member"
+    title="Merge profile"
     size="2extra-large"
   >
     <template #content>
@@ -19,7 +19,7 @@
           </div>
           <div class="w-1/2 px-3">
             <app-member-selection-dropdown
-              v-if="memberToMerge === null"
+              v-if="!memberToMerge"
               :id="props.modelValue?.id"
               v-model="memberToMerge"
               style="margin-right: 5px"
@@ -37,8 +37,8 @@
                   type="button"
                   @click="changeMember()"
                 >
-                  <span class="ri-refresh-line text-base text-brand-500 mr-2" />
-                  <span class="text-brand-500">Change contributor</span>
+                  <span class="ri-refresh-line text-base text-primary-500 mr-2" />
+                  <span class="text-primary-500">Change person</span>
                 </button>
               </template>
             </app-member-suggestions-details>
@@ -54,7 +54,7 @@
             :loading="sendingMerge"
             @click="mergeSuggestion()"
           >
-            Merge contributors
+            Merge profile
           </el-button>
         </div>
       </div>
@@ -63,14 +63,16 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { MemberService } from '@/modules/member/member-service';
+import Message from '@/shared/message/message';
 import { mapActions } from '@/shared/vuex/vuex.helpers';
-import { useMemberStore } from '@/modules/member/store/pinia';
 import { storeToRefs } from 'pinia';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
 import useMemberMergeMessage from '@/shared/modules/merge/config/useMemberMergeMessage';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
 import AppMemberSelectionDropdown from './member-selection-dropdown.vue';
 import AppMemberSuggestionsDetails from './suggestions/member-merge-suggestions-details.vue';
 
@@ -79,9 +81,15 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  toMerge: {
+    type: Object,
+    default: null,
+  },
 });
 
 const emit = defineEmits(['update:modelValue']);
+
+const { trackEvent } = useProductTracking();
 
 const route = useRoute();
 const router = useRouter();
@@ -90,7 +98,6 @@ const lsSegmentsStore = useLfSegmentsStore();
 const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
 
 const { doFind } = mapActions('member');
-const { fetchMembers } = useMemberStore();
 
 const originalMemberPrimary = ref(true);
 const sendingMerge = ref(false);
@@ -105,6 +112,14 @@ const isModalOpen = computed({
     emit('update:modelValue', null);
     memberToMerge.value = null;
   },
+});
+
+watch(() => props.toMerge, (toMerge) => {
+  if (toMerge) {
+    memberToMerge.value = toMerge;
+  }
+}, {
+  immediate: true,
 });
 
 const changeMember = () => {
@@ -122,37 +137,42 @@ const mergeSuggestion = () => {
   const primaryMember = originalMemberPrimary.value ? props.modelValue : memberToMerge.value;
   const secondaryMember = originalMemberPrimary.value ? memberToMerge.value : props.modelValue;
 
-  const { loadingMessage, successMessage, apiErrorMessage } = useMemberMergeMessage;
+  const { loadingMessage, apiErrorMessage } = useMemberMergeMessage;
 
   loadingMessage();
 
+  trackEvent({
+    key: FeatureEventKey.MERGE_MEMBER,
+    type: EventType.FEATURE,
+    properties: {
+      path: route.path,
+    },
+  });
+
   MemberService.merge(primaryMember, secondaryMember)
     .then(() => {
+      Message.closeAll();
+      Message.info(
+        "We're finalizing profiles merging. We will let you know once the process is completed.",
+        {
+          title: 'Profiles merging in progress',
+        },
+      );
       emit('update:modelValue', null);
 
       if (route.name === 'memberView') {
-        successMessage({
-          primaryMember,
-          secondaryMember,
-          selectedProjectGroupId: selectedProjectGroup.value?.id,
-        });
-
-        doFind(id).then(() => {
+        doFind({
+          id: primaryMember.id,
+          segments: [selectedProjectGroup.value?.id],
+        }).then(() => {
           router.replace({
             params: {
               id: primaryMember.id,
             },
           });
         });
-      } else if (route.name === 'member') {
-        successMessage({
-          primaryMember,
-          secondaryMember,
-          selectedProjectGroupId: selectedProjectGroup.value?.id,
-        });
-
-        fetchMembers({ reload: true });
       }
+      emit('update:modelValue', null);
     })
     .catch((error) => {
       apiErrorMessage({ error });

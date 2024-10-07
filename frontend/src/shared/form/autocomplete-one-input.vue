@@ -40,19 +40,32 @@
       v-for="record in localOptions"
       :key="record.id"
     >
-      <el-option
+      <el-tooltip
         v-if="record.id"
-        :value="record"
-        :label="record.label"
-        class="!px-5"
-        @mouseleave="onSelectMouseLeave"
+        :key="record.id"
+        :disabled="!disableOption(record)"
+        content="Active member organizations of the Linux Foundation can't be merged into other organizations."
+        placement="top"
       >
-        <slot name="option" :item="record">
-          <span class="text-ellipsis overflow-hidden">
-            {{ record.label }}
-          </span>
-        </slot>
-      </el-option>
+        <span>
+          <el-option
+            :value="record"
+            :label="record.label"
+            :disabled="disableOption(record)"
+            class="!px-5"
+            :class="{
+              'hover:!bg-transparent': disableOption(record),
+            }"
+            @mouseleave="onSelectMouseLeave"
+          >
+            <slot name="option" :item="record">
+              <span class="text-ellipsis overflow-hidden">
+                {{ record.label }}
+              </span>
+            </slot>
+          </el-option>
+        </span>
+      </el-tooltip>
     </template>
     <div
       v-if="!loading && localOptions.length === limit"
@@ -131,6 +144,10 @@ export default {
       type: String,
       default: null,
     },
+    disableOption: {
+      type: Function,
+      default: () => {},
+    },
   },
   emits: ['update:modelValue'],
   data() {
@@ -206,6 +223,7 @@ export default {
     async fetchAllResults() {
       this.loading = true;
       try {
+        this.localOptions.length = 0;
         this.localOptions = await this.fetchFn({
           query: this.currentQuery,
           limit: AUTOCOMPLETE_SERVER_FETCH_SIZE,
@@ -226,6 +244,7 @@ export default {
       this.loading = true;
 
       try {
+        this.localOptions.length = 0;
         this.localOptions = await this.fetchFn({
           query: value,
           limit: AUTOCOMPLETE_SERVER_FETCH_SIZE,
@@ -234,7 +253,7 @@ export default {
         this.loading = false;
       } catch (error) {
         console.error(error);
-        this.localOptions = [];
+        this.localOptions.length = 0;
         this.loading = false;
       }
     },

@@ -34,7 +34,7 @@
         <el-dropdown-menu class="w-42">
           <!-- all platforms -->
           <el-dropdown-item
-            :class="{ 'bg-brand-50': platform === 'all' }"
+            :class="{ 'bg-primary-50': platform === 'all' }"
             @click="setPlatform('all')"
           >
             All platforms
@@ -47,7 +47,7 @@
             :key="integration"
             :divided="ii === 0"
             :class="{
-              'bg-brand-50': platform === integration,
+              'bg-primary-50': platform === integration,
             }"
             @click="setPlatform(integration)"
           >
@@ -64,7 +64,7 @@
 
     <app-lf-project-filter-button
       :segments="segments"
-      :set-segments="setSegments"
+      :set-segments="setSegment"
     />
   </div>
 </template>
@@ -72,11 +72,13 @@
 <script>
 import { mapGetters, mapActions } from 'vuex';
 import { CrowdIntegrations } from '@/integrations/integrations-config';
-import AppWidgetPeriod from '@/modules/widget/components/shared/widget-period.vue';
 import AppLfProjectFilterButton from '@/modules/lf/segments/components/filter/lf-project-filter-button.vue';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
 import { storeToRefs } from 'pinia';
 import { getSegmentsFromProjectGroup } from '@/utils/segments';
+import AppWidgetPeriod from '@/modules/widget/components/shared/widget-period.vue';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
 
 export default {
   name: 'AppDashboardFilters',
@@ -91,9 +93,6 @@ export default {
   },
   computed: {
     ...mapGetters('dashboard', ['period', 'platform', 'segments']),
-    ...mapGetters('auth', {
-      currentTenant: 'currentTenant',
-    }),
     ...mapGetters('integration', {
       activeIntegrations: 'activeList',
     }),
@@ -114,23 +113,14 @@ export default {
     },
   },
   watch: {
-    currentTenant: {
-      deep: true,
-      immediate: true,
-      handler(tenant, previousTenant) {
-        if (
-          !previousTenant
-          || tenant.id !== previousTenant.id
-        ) {
-          this.setFilters({});
-        }
-      },
-    },
     selectedProjectGroup: {
       deep: true,
       immediate: true,
       handler(updatedSelectedProjectGroup, previouSelectedProjectGroup) {
         if (previouSelectedProjectGroup?.id !== updatedSelectedProjectGroup?.id) {
+          this.setFilters({
+            segments: { segments: [updatedSelectedProjectGroup?.id], childSegments: [] },
+          });
           this.doFetch(getSegmentsFromProjectGroup(updatedSelectedProjectGroup));
         }
       },
@@ -141,18 +131,56 @@ export default {
   methods: {
     ...mapActions({
       setFilters: 'dashboard/setFilters',
-      setSegments: 'dashboard/setSegments',
       doFetch: 'integration/doFetch',
     }),
+    setSegment(filters) {
+      if (filters.segments?.segments?.length) {
+        const { trackEvent } = useProductTracking();
+
+        trackEvent({
+          key: FeatureEventKey.FILTER_DASHBOARD,
+          type: EventType.FEATURE,
+          properties: {
+            filter: { projects: filters.segments.segments },
+          },
+        });
+
+        this.setFilters(filters);
+      }
+    },
     platformDetails(platform) {
       return CrowdIntegrations.getConfig(platform);
     },
     setPeriod(period) {
+      const { trackEvent } = useProductTracking();
+
+      trackEvent({
+        key: FeatureEventKey.FILTER_DASHBOARD,
+        type: EventType.FEATURE,
+        properties: {
+          filter: {
+            period,
+          },
+        },
+      });
+
       this.setFilters({
         period,
       });
     },
     setPlatform(platform) {
+      const { trackEvent } = useProductTracking();
+
+      trackEvent({
+        key: FeatureEventKey.FILTER_DASHBOARD,
+        type: EventType.FEATURE,
+        properties: {
+          filter: {
+            platform,
+          },
+        },
+      });
+
       this.setFilters({
         platform,
       });

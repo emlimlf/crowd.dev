@@ -1,37 +1,82 @@
 <template>
-  <app-page-wrapper
-    :container-class="'col-start-1 col-span-12'"
-  >
+  <app-page-wrapper :container-class="'col-start-1 col-span-12'">
     <div class="organization-form-page">
-      <el-button
-        key="organizations"
-        link
-        :icon="ArrowPrevIcon"
-        class="text-gray-600 btn-link--md btn-link--secondary p-0"
-        @click="onCancel"
-      >
-        Organizations
-      </el-button>
-      <div class="flex items-center gap-4 mt-4 mb-6">
-        <h4>
-          {{
-            isEditPage
-              ? 'Edit organization'
-              : 'New organization'
-          }}
-        </h4>
-        <div
-          v-if="!isEditPage && selectedSegments.project && selectedSegments.subproject"
-          class="badge badge--gray-light badge--xs"
-        >
-          {{ selectedSegments.subproject.name }} ({{ selectedSegments.project.name }})
+      <div class="sticky -top-5 z-20 bg-white -mx-2 px-2 -mt-6 pt-6 block">
+        <div class="border-b border-gray-200">
+          <el-button
+            key="organizations"
+            link
+            :icon="ArrowPrevIcon"
+            class="text-gray-600 btn-link--md btn-link--secondary p-0"
+            @click="onCancel"
+          >
+            Organizations
+          </el-button>
+          <div class="flex justify-between">
+            <div class="flex items-center gap-4 mt-4 mb-6">
+              <h4>
+                {{
+                  isEditPage
+                    ? 'Edit organization'
+                    : 'New organization'
+                }}
+              </h4>
+              <div
+                v-if="!isEditPage && selectedSegments.project && selectedSegments.subproject"
+                class="badge badge--gray-light badge--xs"
+              >
+                {{ selectedSegments.subproject.name }} ({{ selectedSegments.project.name }})
+              </div>
+            </div>
+            <div class="flex items-center">
+              <el-button
+                v-if="isEditPage && hasFormChanged"
+                class="btn btn-link btn-link--primary !px-3"
+                :disabled="isFormSubmitting"
+                @click="onReset"
+              >
+                <i class="ri-arrow-go-back-line" />
+                <span>Reset changes</span>
+              </el-button>
+              <div
+                v-if="isEditPage && hasFormChanged"
+                class="mx-4 border-x border-gray-200 h-10"
+              />
+              <div class="flex gap-4">
+                <el-button
+                  :disabled="isFormSubmitting"
+                  class="btn btn--md btn--bordered"
+                  @click="onCancel"
+                >
+                  Cancel
+                </el-button>
+                <el-button
+                  :disabled="isSubmitBtnDisabled"
+                  :loading="isFormSubmitting"
+                  :loading-icon="LoaderIcon"
+                  class="btn btn--md btn--primary"
+                  @click="onSubmit"
+                >
+                  {{
+                    isEditPage
+                      ? 'Update organization'
+                      : 'Add organization'
+                  }}
+                </el-button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
       <el-container
         v-if="!isPageLoading"
-        class="bg-white rounded-lg shadow shadow-black/15"
+        class="bg-white rounded-b-lg flex flex-col"
       >
-        <div v-if="!isEditPage" class="grid gap-x-12 grid-cols-3 bg-gray-50 p-6">
+        <div
+          v-if="!isEditPage"
+          class="grid gap-x-12 grid-cols-3 bg-gray-50 p-6"
+        >
           <div class="col-span-2 col-start-2 relative">
             <app-lf-sub-projects-list-dropdown
               :selected-subproject="selectedSegments.subproject"
@@ -55,14 +100,31 @@
             <el-divider
               class="!mb-6 !mt-8 !border-gray-200"
             />
-            <app-organization-form-identities
-              v-model="formModel"
-              :record="record"
+            <div class="grid gap-x-12 grid-cols-3">
+              <h6>Identities</h6>
+              <div class="col-span-2">
+                <app-organization-form-identities
+                  v-model="formModel"
+                  :record="record"
+                />
+              </div>
+            </div>
+            <el-divider
+              class="!mb-6 !mt-8 !border-gray-200"
+            />
+            <div class="grid gap-x-12 grid-cols-3">
+              <h6>Emails</h6>
+              <div class="col-span-2">
+                <app-organization-form-emails
+                  v-model="formModel"
+                />
+              </div>
+            </div>
+            <el-divider
+              class="!mb-6 !mt-8 !border-gray-200"
             />
             <div v-if="shouldShowAttributes">
-              <el-divider
-                class="!mb-6 !mt-8 !border-gray-200"
-              />
+              <el-divider class="!mb-6 !mt-8 !border-gray-200" />
               <app-organization-form-attributes
                 v-model="formModel"
                 :organization="record"
@@ -70,52 +132,9 @@
             </div>
           </el-form>
         </el-main>
-        <el-footer
-          class="bg-gray-50 flex items-center p-6 h-fit rounded-b-lg"
-          :class="
-            isEditPage && hasFormChanged
-              ? 'justify-between'
-              : 'justify-end'
-          "
-        >
-          <el-button
-            v-if="isEditPage && hasFormChanged"
-            class="btn btn-link btn-link--primary"
-            :disabled="isFormSubmitting"
-            @click="onReset"
-          >
-            <i class="ri-arrow-go-back-line" />
-            <span>Reset changes</span>
-          </el-button>
-          <div class="flex gap-4">
-            <el-button
-              :disabled="isFormSubmitting"
-              class="btn btn--md btn--secondary"
-              @click="onCancel"
-            >
-              Cancel
-            </el-button>
-            <el-button
-              :disabled="isSubmitBtnDisabled"
-              :loading="isFormSubmitting"
-              :loading-icon="LoaderIcon"
-              class="btn btn--md btn--primary"
-              @click="onSubmit"
-            >
-              {{
-                isEditPage
-                  ? 'Update organization'
-                  : 'Add organization'
-              }}
-            </el-button>
-          </div>
-        </el-footer>
       </el-container>
       <el-container v-else>
-        <div
-          v-loading="isPageLoading"
-          class="app-page-spinner w-full"
-        />
+        <div v-loading="isPageLoading" class="app-page-spinner w-full" />
       </el-container>
     </div>
   </app-page-wrapper>
@@ -123,19 +142,9 @@
 
 <script setup>
 import {
-  computed,
-  h,
-  onMounted,
-  onUnmounted,
-  reactive,
-  ref,
-  watch,
+  computed, h, onMounted, onUnmounted, reactive, ref, watch,
 } from 'vue';
-import {
-  onBeforeRouteLeave,
-  useRoute,
-  useRouter,
-} from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import isEqual from 'lodash/isEqual';
 import { OrganizationModel } from '@/modules/organization/organization-model';
 import { FormSchema } from '@/shared/form/form-schema';
@@ -152,6 +161,10 @@ import Message from '@/shared/message/message';
 import { i18n } from '@/i18n';
 import enrichmentAttributes from '@/modules/organization/config/enrichment';
 import { AttributeType } from '@/modules/organization/types/Attributes';
+import AppOrganizationFormEmails from '@/modules/organization/components/form/organization-form-emails.vue';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
+import { useOrganizationStore } from '../store/pinia';
 
 const LoaderIcon = h(
   'i',
@@ -179,32 +192,19 @@ const { fields } = OrganizationModel;
 const formSchema = new FormSchema([
   fields.name,
   fields.displayName,
-  fields.headline,
   fields.description,
-  fields.website,
   fields.location,
   fields.employees,
   fields.revenueRange,
-  fields.github,
-  fields.twitter,
-  fields.linkedin,
-  fields.crunchbase,
   fields.emails,
   fields.identities,
-  fields.phoneNumbers,
   fields.type,
   fields.size,
   fields.industry,
   fields.founded,
-  fields.profiles,
-  fields.affiliatedProfiles,
-  fields.allSubsidiaries,
-  fields.alternativeDomains,
-  fields.alternativeNames,
   fields.averageEmployeeTenure,
   fields.averageTenureByLevel,
   fields.averageTenureByRole,
-  fields.directSubsidiaries,
   fields.employeeChurnRate,
   fields.employeeCountByCountry,
   fields.employeeCountByMonth,
@@ -213,9 +213,10 @@ const formSchema = new FormSchema([
   fields.grossAdditionsByMonth,
   fields.grossDeparturesByMonth,
   fields.immediateParent,
-  fields.tags,
   fields.ultimateParent,
 ]);
+
+const { trackEvent } = useProductTracking();
 
 const router = useRouter();
 const route = useRoute();
@@ -223,19 +224,19 @@ const route = useRoute();
 const lsSegmentsStore = useLfSegmentsStore();
 const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
 
+const organizationsStore = useOrganizationStore();
+
 const selectedSegments = computed(() => {
   let subproject;
 
-  const project = selectedProjectGroup.value.projects.find(
-    (p) => p.subprojects.some((sp) => {
-      if (sp.id === route.query.subprojectId) {
-        subproject = sp;
-        return true;
-      }
+  const project = selectedProjectGroup.value.projects.find((p) => p.subprojects.some((sp) => {
+    if (sp.id === route.query.subprojectId) {
+      subproject = sp;
+      return true;
+    }
 
-      return false;
-    }),
-  );
+    return false;
+  }));
 
   return {
     project,
@@ -250,25 +251,12 @@ function getInitialModel(record) {
         ...(record || {}),
         name: record ? record.name : '',
         displayName: record ? record.displayName || record.name : '',
-        headline: record ? record.headline : '',
-        description: record ? record.description : '',
         joinedAt: record ? record.joinedAt : '',
-        identities: record ? [...record.identities.map((i) => ({
-          ...i,
-          platform: i.platform,
-          name: i.name,
-          username: i.url ? i.url.split('/').at(-1) : null,
-          url: i.url,
-        }))] : [],
-        revenueRange: record ? record.revenueRange : {},
-        emails:
-          record && record.emails?.length > 0
-            ? record.emails
-            : [''],
-        phoneNumbers:
-          record && record.phoneNumbers?.length > 0
-            ? record.phoneNumbers
-            : [''],
+        identities: record
+          ? [
+            ...record.identities,
+          ]
+          : [],
       }),
     ),
   );
@@ -280,7 +268,7 @@ const formModel = ref(getInitialModel());
 
 const isPageLoading = ref(true);
 const isFormSubmitting = ref(false);
-const wasFormSubmittedSuccessfuly = ref(false);
+const wasFormSubmittedSuccessfully = ref(false);
 
 const rules = reactive(formSchema.rules());
 
@@ -290,7 +278,9 @@ const isFormValid = computed(() => formSchema.isValidSync(formModel.value));
 
 const segments = computed(() => {
   if (!isEditPage.value) {
-    return selectedSegments.value.subproject ? [selectedSegments.value.subproject.id] : [];
+    return selectedSegments.value.subproject
+      ? [selectedSegments.value.subproject.id]
+      : [];
   }
 
   return record.value.segments?.map((s) => s.id) || [];
@@ -326,7 +316,7 @@ const shouldShowAttributes = computed(() => enrichmentAttributes.some((a) => {
 onBeforeRouteLeave((to) => {
   if (
     hasFormChanged.value
-    && !wasFormSubmittedSuccessfuly.value
+    && !wasFormSubmittedSuccessfully.value
     && to.fullPath !== '/500'
   ) {
     return ConfirmDialog({})
@@ -368,36 +358,30 @@ const preventWindowReload = (e) => {
 window.addEventListener('beforeunload', preventWindowReload);
 
 onUnmounted(() => {
-  window.removeEventListener(
-    'beforeunload',
-    preventWindowReload,
-  );
+  window.removeEventListener('beforeunload', preventWindowReload);
 });
 
-// Once form is submitted successfuly, update route
-watch(
-  wasFormSubmittedSuccessfuly,
-  (isFormSubmittedSuccessfuly) => {
-    if (isFormSubmittedSuccessfuly) {
-      if (isEditPage.value) {
-        const { segmentId, projectGroup } = route.query;
+// Once form is submitted successfully, update route
+watch(wasFormSubmittedSuccessfully, (isFormSubmittedSuccessfully) => {
+  if (isFormSubmittedSuccessfully) {
+    if (isEditPage.value) {
+      const { segmentId, projectGroup } = route.query;
 
-        return router.push({
-          name: 'organizationView',
-          params: {
-            id: record.value.id,
-          },
-          query: {
-            segmentId: segmentId || projectGroup,
-          },
-        });
-      }
-
-      return router.push({ name: 'organization' });
+      return router.push({
+        name: 'organizationView',
+        params: {
+          id: record.value.id,
+        },
+        query: {
+          segmentId: segmentId || projectGroup,
+        },
+      });
     }
-    return null;
-  },
-);
+
+    return router.push({ name: 'organization' });
+  }
+  return null;
+});
 
 function onReset() {
   formModel.value = isEditPage.value
@@ -406,38 +390,35 @@ function onReset() {
 }
 
 function onCancel() {
-  router.push({ name: 'organization' });
+  const { segmentId, projectGroup } = route.query;
+
+  router.push({
+    name: 'organizationView',
+    params: {
+      id: record.value.id,
+    },
+    query: {
+      segmentId: segmentId || projectGroup,
+    },
+  });
 }
 
 async function onSubmit() {
   isFormSubmitting.value = true;
 
+  const { emails, ...rest } = formModel.value;
+
+  const name = isEditPage.value === false ? formModel.value.displayName : undefined;
+
   const data = {
     manuallyCreated: true,
-    ...formModel.value,
-    name: isEditPage.value === false ? formModel.value.displayName : undefined,
-    displayName: isEditPage.value === true ? formModel.value.displayName : undefined,
-    emails: formModel.value.emails.reduce((acc, item) => {
-      if (item !== '') {
-        acc.push(item);
-      }
-      return acc;
-    }, []),
-    identities: formModel.value.identities.filter((i) => i.username?.length > 0 || i.organizationId).map((i) => ({
-      ...i,
-      platform: i.platform,
-      url: i.url,
-      name: i.name,
-    })),
-    phoneNumbers: formModel.value.phoneNumbers.reduce(
-      (acc, item) => {
-        if (item !== '') {
-          acc.push(item);
-        }
-        return acc;
+    ...rest,
+    attributes: {
+      name: {
+        default: name,
+        custom: [name],
       },
-      [],
-    ),
+    },
   };
 
   const payload = isEditPage.value
@@ -453,18 +434,56 @@ async function onSubmit() {
 
   // Edit
   if (isEditPage.value) {
+    trackEvent({
+      key: FeatureEventKey.EDIT_ORGANIZATION,
+      type: EventType.FEATURE,
+      properties: {
+        ...payload.values,
+      },
+    });
+
     try {
-      await OrganizationService.update(
-        payload.id,
-        payload.values,
-      );
+      await OrganizationService.update(payload.id, payload.values);
       Message.success(i18n('entities.organization.update.success'));
     } catch (error) {
-      Message.error(i18n('entities.organization.update.error'));
-
-      Errors.handle(error);
+      if (error.response.status === 409) {
+        Message.error(
+          h(
+            'div',
+            {
+              class: 'flex flex-col gap-2',
+            },
+            [
+              h(
+                'el-button',
+                {
+                  class: 'btn btn--xs btn--secondary !h-6 !w-fit',
+                  onClick: () => {
+                    organizationsStore.addToMergeOrganizations(payload.id, error.response.data);
+                    Message.closeAll();
+                  },
+                },
+                'Merge organizations',
+              ),
+            ],
+          ),
+          {
+            title: 'Organization was not updated because the website already exists in another organization.',
+          },
+        );
+      } else {
+        Errors.handle(error);
+      }
     }
   } else {
+    trackEvent({
+      key: FeatureEventKey.ADD_ORGANIZATION,
+      type: EventType.FEATURE,
+      properties: {
+        ...payload,
+      },
+    });
+
     // Create
     try {
       await OrganizationService.create(payload);
@@ -476,7 +495,7 @@ async function onSubmit() {
     }
   }
   isFormSubmitting.value = false;
-  wasFormSubmittedSuccessfuly.value = true;
+  wasFormSubmittedSuccessfully.value = true;
 }
 
 const onChange = ({ subprojectId }) => {
@@ -497,7 +516,7 @@ export default {
 
 <style lang="scss">
 .organization-form-page {
-  .el-button [class*='el-icon'] + span {
+  .el-button [class*="el-icon"] + span {
     @apply ml-1;
   }
 

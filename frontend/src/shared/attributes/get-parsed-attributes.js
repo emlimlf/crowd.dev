@@ -3,25 +3,24 @@
  */
 export default (attributes, model) => attributes.reduce(
   (obj, attribute) => {
-    if (
-      model[attribute.name] === undefined
-        || model[attribute.name] === null
-        || model[attribute.name] === ''
-        || model[attribute.name].default === ''
-    ) {
+    if (model[attribute.name]) {
       return {
         ...obj,
-        [attribute.name]: undefined,
+        [attribute.name]: {
+          ...model.attributes[attribute.name],
+          ...(
+            model[attribute.name] !== model.attributes[attribute.name]?.default
+            && {
+              custom: model[attribute.name],
+              default: model[attribute.name],
+            }),
+        },
       };
     }
 
     return {
       ...obj,
-      [attribute.name]: {
-        ...model.attributes[attribute.name],
-        default: model[attribute.name],
-        custom: model[attribute.name],
-      },
+      ...model.attributes[attribute.name] && { [attribute.name]: undefined },
     };
   },
   {

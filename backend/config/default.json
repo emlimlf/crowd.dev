@@ -6,14 +6,12 @@
   "integrationProcessing": {
     "maxRetries": 5
   },
-  "sqs": {},
   "s3": {},
   "db": {
     "dialect": "postgres",
     "logging": false,
     "transactions": false
   },
-  "cubejs": {},
   "searchEngine": {},
   "segment": {},
   "comprehend": {
@@ -23,7 +21,6 @@
   "netlify": {},
   "sendgrid": {},
   "plans": {},
-  "devto": {},
   "twitter": {
     "maxRetrospectInSeconds": 7380,
     "limitResetFrequencyDays": 30
@@ -38,6 +35,7 @@
   },
   "github": {},
   "stackexchange": {},
+  "reddit": {},
   "enrichment": {},
   "organizationEnrichment": {},
   "eagleEye": {},
@@ -64,5 +62,6 @@
   },
   "searchSyncApi": {},
   "encryption": {},
-  "openStatusApi": {}
+  "openStatusApi": {},
+  "gitlab": {}
 }

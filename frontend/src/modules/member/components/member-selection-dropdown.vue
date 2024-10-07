@@ -6,7 +6,7 @@
       />
     </div>
     <div class="text-gray-600 text-sm text-center py-4">
-      Select the contributor you want to merge with
+      Select the profile you want to merge with
     </div>
     <div class="flex justify-center">
       <div class="flex w-4/5">
@@ -14,7 +14,7 @@
           id="searchMembers"
           v-model="computedMemberToMerge"
           :fetch-fn="fetchFn"
-          placeholder="Type to search contributors"
+          placeholder="Search people"
           input-class="w-full"
         >
           <template #option="{ item }">
@@ -22,7 +22,7 @@
               <app-avatar
                 :entity="{
                   displayName: item.label,
-                  avatar: item.avatar,
+                  avatar: item.logo,
                 }"
                 size="xs"
                 class="mr-3"
@@ -51,6 +51,8 @@ import {
 import { MemberService } from '@/modules/member/member-service';
 import AppAutocompleteOneInput from '@/shared/form/autocomplete-one-input.vue';
 import AppAvatar from '@/shared/avatar/avatar.vue';
+import { storeToRefs } from 'pinia';
+import { useLfSegmentsStore } from '@/modules/lf/segments/store';
 
 const emit = defineEmits('update:modelValue');
 const props = defineProps({
@@ -78,10 +80,14 @@ const computedMemberToMerge = computed({
   },
 });
 
+const lsSegmentsStore = useLfSegmentsStore();
+const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
+
 const fetchFn = async ({ query, limit }) => {
-  const options = await MemberService.listAutocomplete({
+  const options = await MemberService.listMembersAutocomplete({
     query,
     limit,
+    segments: [selectedProjectGroup.value.id],
   });
 
   // Remove primary member from members that can be merged with

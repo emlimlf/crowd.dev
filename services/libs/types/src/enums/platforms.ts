@@ -22,6 +22,11 @@ export enum PlatformType {
   GROUPSIO = 'groupsio',
   CONFLUENCE = 'confluence',
   GERRIT = 'gerrit',
+  JIRA = 'jira',
+  LFID = 'lfid',
+  CVENT = 'cvent',
+  TNC = 'tnc',
+  GITLAB = 'gitlab',
   OTHER = 'other',
 }
 

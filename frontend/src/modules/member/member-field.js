@@ -1,7 +1,6 @@
 import { MemberService } from '@/modules/member/member-service';
 import RelationToOneField from '@/shared/fields/relation-to-one-field';
 import RelationToManyField from '@/shared/fields/relation-to-many-field';
-import Permissions from '@/security/permissions';
 
 export class MemberField {
   static relationToOne(name, label, options) {
@@ -9,8 +8,8 @@ export class MemberField {
       name,
       label,
       '/members',
-      Permissions.values.memberRead,
-      MemberService.listAutocomplete,
+      null,
+      MemberService.listMembersAutocomplete,
       (record) => {
         if (!record) {
           return null;
@@ -30,8 +29,8 @@ export class MemberField {
       name,
       label,
       '/members',
-      Permissions.values.memberRead,
-      MemberService.listAutocomplete,
+      null,
+      MemberService.listMembersAutocomplete,
       (record) => {
         if (!record) {
           return null;

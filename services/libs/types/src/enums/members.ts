@@ -28,6 +28,16 @@ export enum MemberAttributeName {
   TIMEZONE = 'timezone',
   KARMA = 'karma',
   SYNC_REMOTE = 'syncRemote',
+  LANGUAGES = 'languages',
+  PROGRAMMING_LANGUAGES = 'programmingLanguages',
+}
+
+export enum MemberAttributeOpensearch {
+  LOCATION = 'obj_location',
+  AVATAR_URL = 'obj_avatarUrl',
+  LANGUAGES = 'string_arr_languages',
+  PROGRAMMING_LANGUAGES = 'string_arr_programmingLanguages',
+  TIMEZONE = 'string_timezone',
 }
 
 export const MemberAttributes = {
@@ -99,6 +109,10 @@ export const MemberAttributes = {
     name: MemberAttributeName.SYNC_REMOTE,
     label: 'Sync remote',
   },
+  [MemberAttributeName.COMPANY]: {
+    name: MemberAttributeName.COMPANY,
+    label: 'Company',
+  },
 }
 
 export enum MemberEnrichmentAttributeName {
@@ -165,4 +179,9 @@ export const MemberEnrichmentAttributes = {
     name: MemberEnrichmentAttributeName.EXPERTISE,
     label: 'Expertise',
   },
+}
+
+export enum MemberIdentityType {
+  USERNAME = 'username',
+  EMAIL = 'email',
 }

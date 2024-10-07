@@ -1,11 +1,11 @@
 import authAxios from '@/shared/axios/auth-axios';
-import AuthCurrentTenant from '@/modules/auth/auth-current-tenant';
+import { AuthService } from '@/modules/auth/services/auth.service';
 
 export class LfService {
   // Segments
 
   static async findSegment(id) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.get(
       `/tenant/${tenantId}/segment/${id}`,
@@ -19,8 +19,21 @@ export class LfService {
     return response.data;
   }
 
+  static async listSegmentsByIds(ids) {
+    const tenantId = AuthService.getTenantId();
+
+    const response = await authAxios.post(
+      `/tenant/${tenantId}/segment/id`,
+      {
+        ids,
+      },
+    );
+
+    return response.data;
+  }
+
   static async updateSegment(id, data) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.put(
       `/tenant/${tenantId}/segment/${id}`,
@@ -36,7 +49,7 @@ export class LfService {
   // Project Groups
 
   static async queryProjectGroups(body) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.post(
       `/tenant/${tenantId}/segment/projectGroup/query`,
@@ -50,7 +63,7 @@ export class LfService {
   }
 
   static async createProjectGroup(body) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.post(
       `/tenant/${tenantId}/segment/projectGroup`,
@@ -66,7 +79,7 @@ export class LfService {
   // Projects
 
   static async queryProjects(body) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.post(
       `/tenant/${tenantId}/segment/project/query`,
@@ -80,7 +93,7 @@ export class LfService {
   }
 
   static async createProject(body) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.post(
       `/tenant/${tenantId}/segment/project`,
@@ -93,11 +106,54 @@ export class LfService {
   // Sub-projects
 
   static async createSubProject(body) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.post(
       `/tenant/${tenantId}/segment/subproject`,
       body,
+    );
+
+    return response.data;
+  }
+
+  // Users
+
+  static async fetchUsers(query, limit) {
+    const params = {
+      query,
+      limit,
+    };
+
+    const tenantId = AuthService.getTenantId();
+
+    const response = await authAxios.get(
+      `/tenant/${tenantId}/user/autocomplete`,
+      {
+        params,
+      },
+    );
+
+    return response.data;
+  }
+
+  static async getUser(id) {
+    const tenantId = AuthService.getTenantId();
+
+    const response = await authAxios.get(
+      `/tenant/${tenantId}/user/${id}`,
+    );
+
+    return response.data;
+  }
+
+  // AuditLogs
+
+  static async fetchAuditLogs(data) {
+    const tenantId = AuthService.getTenantId();
+
+    const response = await authAxios.post(
+      `/tenant/${tenantId}/audit-logs/query`,
+      data,
     );
 
     return response.data;

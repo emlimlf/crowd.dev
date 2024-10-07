@@ -14,6 +14,9 @@ export class OrganizationsOpensearch extends OpensearchModelBase {
     segmentId: {
       type: OpensearchFieldType.UUID,
     },
+    grandParentSegment: {
+      type: OpensearchFieldType.BOOL,
+    },
     tenantId: {
       type: OpensearchFieldType.UUID,
     },
@@ -37,6 +40,9 @@ export class OrganizationsOpensearch extends OpensearchModelBase {
       type: OpensearchFieldType.STRING,
     },
     emails: {
+      type: OpensearchFieldType.STRING_ARR,
+    },
+    names: {
       type: OpensearchFieldType.STRING_ARR,
     },
     tags: {
@@ -93,25 +99,6 @@ export class OrganizationsOpensearch extends OpensearchModelBase {
     type: {
       type: OpensearchFieldType.STRING,
     },
-    website: {
-      type: OpensearchFieldType.STRING,
-    },
-    linkedin: {
-      type: OpensearchFieldType.OBJECT,
-      preventNestedFieldTranslation: true,
-    },
-    github: {
-      type: OpensearchFieldType.OBJECT,
-      preventNestedFieldTranslation: true,
-    },
-    crunchbase: {
-      type: OpensearchFieldType.OBJECT,
-      preventNestedFieldTranslation: true,
-    },
-    twitter: {
-      type: OpensearchFieldType.OBJECT,
-      preventNestedFieldTranslation: true,
-    },
     joinedAt: {
       type: OpensearchFieldType.DATE,
     },
@@ -132,17 +119,6 @@ export class OrganizationsOpensearch extends OpensearchModelBase {
     },
     identities: {
       type: OpensearchFieldType.NESTED,
-      customTranslation: {
-        toOpensearch: 'nested_identities.string_name',
-        fromOpensearch: 'nested_identities',
-      },
-    },
-    weakIdentities: {
-      type: OpensearchFieldType.NESTED,
-      customTranslation: {
-        toOpensearch: 'nested_weakIdentities.string_name',
-        fromOpensearch: 'nested_weakIdentities',
-      },
     },
     isTeamOrganization: {
       type: OpensearchFieldType.BOOL,
@@ -156,13 +132,7 @@ export class OrganizationsOpensearch extends OpensearchModelBase {
     ultimateParent: {
       type: OpensearchFieldType.STRING,
     },
-    affiliatedProfiles: {
-      type: OpensearchFieldType.STRING_ARR,
-    },
     allSubsidiaries: {
-      type: OpensearchFieldType.STRING_ARR,
-    },
-    alternativeDomains: {
       type: OpensearchFieldType.STRING_ARR,
     },
     alternativeNames: {

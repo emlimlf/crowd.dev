@@ -1,6 +1,7 @@
 import { getServiceChildLogger } from '@crowd/logging'
-import { DbConnection, DbInstance, IDatabaseConfig } from './types'
 import pgPromise from 'pg-promise'
+import { DbConnection, DbInstance, IDatabaseConfig } from './types'
+import { IS_CLOUD_ENV, IS_DEV_ENV } from '@crowd/common'
 
 const log = getServiceChildLogger('database.connection')
 
@@ -19,13 +20,25 @@ export const getDbInstance = (): DbInstance => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async error(err: any, e: pgPromise.IEventContext): Promise<void> {
       if (e.cn) {
-        if (log !== undefined) log.fatal(err, { cn: e.cn }, 'DB connection error. Stopping process')
+        log.fatal(err, { cn: e.cn }, 'PostgreSQL connection error. Stopping process')
         // logs don't have flush:
         await new Promise((resolve) => setTimeout(resolve, 100))
         process.nextTick(() => process.exit())
       }
+
+      if (e.query) {
+        log.error(err, { query: e.query, params: e.params }, 'Error executing a PostgreSQL query!')
+      }
+    },
+    query(e) {
+      log.debug({ query: e.query, params: e.params }, 'Executing PostgreSQL query')
     },
   })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((dbInstance.pg as any).usingSequelize) {
+    return dbInstance
+  }
 
   // timestamp
   dbInstance.pg.types.setTypeParser(1114, (s) => s)
@@ -49,8 +62,9 @@ export const getDbConnection = async (
   maxPoolSize?: number,
   idleTimeoutMillis?: number,
 ): Promise<DbConnection> => {
-  if (dbConnection[config.host]) {
-    return dbConnection[config.host]
+  const cacheKey = `${config.host}:${config.database}`
+  if (dbConnection[cacheKey]) {
+    return dbConnection[cacheKey]
   }
 
   log.info(
@@ -60,15 +74,18 @@ export const getDbConnection = async (
 
   const dbInstance = getDbInstance()
 
-  dbConnection[config.host] = dbInstance({
+  dbConnection[cacheKey] = dbInstance({
     ...config,
-    max: maxPoolSize || 20,
+    ssl: IS_CLOUD_ENV
+      ? {
+          rejectUnauthorized: false,
+        }
+      : false,
+    max: maxPoolSize || (IS_DEV_ENV ? 5 : 20),
     idleTimeoutMillis: idleTimeoutMillis !== undefined ? idleTimeoutMillis : 10000,
     // query_timeout: 30000,
     application_name: process.env.SERVICE || 'unknown-app',
   })
 
-  await dbConnection[config.host].connect()
-
-  return dbConnection[config.host]
+  return dbConnection[cacheKey]
 }

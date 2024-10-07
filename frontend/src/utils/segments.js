@@ -1,9 +1,5 @@
-import { store } from '@/store';
-import { PermissionChecker } from '@/modules/user/permission-checker';
-import Roles from '@/security/roles';
 import { storeToRefs } from 'pinia';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
-import { LfService } from '@/modules/lf/segments/lf-segments-service';
 
 export const getSegmentsFromProjectGroup = (projectGroup, options) => {
   if (!projectGroup) {
@@ -23,55 +19,19 @@ export const getSegmentsFromProjectGroup = (projectGroup, options) => {
   }, []);
 };
 
-export const hasAccessToProjectGroup = (segmentId) => {
-  const currentUser = store.getters['auth/currentUser'];
-  const currentTenant = store.getters['auth/currentTenant'];
-
-  const permissionChecker = new PermissionChecker(currentTenant, currentUser);
-
-  const isAdmin = permissionChecker.currentUserRolesIds.includes(
-    Roles.values.admin,
-  );
-
-  if (isAdmin) {
-    return true;
-  }
-
-  const tenant = currentUser.tenants.find((t) => t.tenantId === currentTenant.id);
-  const { adminSegments = [] } = tenant;
-
-  if (!adminSegments.length) {
-    return false;
-  }
-
+export const getProjectGroupsThroughSegments = (segments) => {
   const lsSegmentsStore = useLfSegmentsStore();
-  const { adminProjectGroups } = storeToRefs(lsSegmentsStore);
+  const { projectGroups } = storeToRefs(lsSegmentsStore);
 
-  const segments = adminProjectGroups.value.list.map((p) => p.id);
-
-  return segments.includes(segmentId);
+  return projectGroups.value.list.filter((p) => segments.includes(p.id)).map((p) => ({
+    id: p.id,
+    name: p.name,
+  }));
 };
 
-export const hasAccessToSegmentId = (segmentId) => {
-  const currentUser = store.getters['auth/currentUser'];
-  const currentTenant = store.getters['auth/currentTenant'];
+export const getSegmentName = (segmentId) => {
+  const lsSegmentsStore = useLfSegmentsStore();
+  const { projectGroups } = storeToRefs(lsSegmentsStore);
 
-  const permissionChecker = new PermissionChecker(currentTenant, currentUser);
-
-  const isAdmin = permissionChecker.currentUserRolesIds.includes(
-    Roles.values.admin,
-  );
-
-  if (isAdmin) {
-    return true;
-  }
-
-  const tenant = currentUser.tenants.find((t) => t.tenantId === currentTenant.id);
-  const { adminSegments = [] } = tenant;
-
-  if (!adminSegments.length) {
-    return false;
-  }
-
-  return adminSegments.includes(segmentId);
+  return projectGroups.value.list.find((p) => p.id === segmentId)?.name ?? '';
 };

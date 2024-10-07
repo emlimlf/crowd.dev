@@ -1,57 +1,50 @@
-import { IAttributes } from './attributes'
-import { OrganizationSource } from './enums/organizations'
+import { OrganizationIdentityType, OrganizationSource } from './enums/organizations'
 
 export interface IOrganization {
+  // db fields
   id?: string
-  displayName?: string
   url?: string
-  description?: string
-  emails?: string[]
-  logo?: string
   avatarUrl?: string
-  tags?: string[]
-  github?: IOrganizationSocial
-  twitter?: IOrganizationSocial
-  linkedin?: IOrganizationSocial
-  crunchbase?: IOrganizationSocial
-  employees?: number
-  location?: string
-  website?: string
-  type?: string
-  size?: string
-  headline?: string
-  industry?: string
-  founded?: string
-  attributes?: IAttributes
-  immediateParent?: string
-  ultimateParent?: string
-  affiliatedProfiles?: string[]
-  allSubsidiaries?: string[]
-  alternativeDomains?: string[]
-  alternativeNames?: string[]
-  averageEmployeeTenure?: number
-  averageTenureByLevel?: Record<string, number>
-  averageTenureByRole?: Record<string, number>
-  employeeChurnRate?: Record<string, number>
-  employeeChurnRate12Month?: number
-  employeeCountByMonth?: Record<string, number>
-  employeeGrowthRate?: Record<string, number>
-  employeeGrowthRate12Month?: number
-  employeeCountByMonthByLevel?: Record<string, number>
-  employeeCountByMonthByRole?: Record<string, number>
-  directSubsidiaries?: string[]
-  gicsSector?: string
-  grossAdditionsByMonth?: Record<string, number>
-  grossDeparturesByMonth?: Record<string, number>
-  identities: IOrganizationIdentity[]
-  weakIdentities?: IOrganizationIdentity[]
-  members?: string[]
-  source?: OrganizationSource
-  revenueRange?: Record<string, number>
+  importHash?: string
+  createdAt?: string | Date
+  updatedAt?: string | Date
+  deletedAt?: string | Date
+  tenantId?: string
+  createdById?: string
+  updatedById?: string
+  isTeamOrganization?: boolean
+  lastEnrichedAt?: string | Date
+  searchSyncedAt?: string | Date
+  manuallyCreated?: boolean
+
+  // calculated fields
   revenueRangeMin?: number
   revenueRangeMax?: number
-  lastEnrichedAt?: string | Date
-  tenantId?: string
+  source?: OrganizationSource
+  employeeChurnRate12Month?: number
+  employeeGrowthRate12Month?: number
+
+  // relations
+  identities?: IOrganizationIdentity[]
+  members?: string[]
+
+  // attributes
+  tags?: string[]
+  description?: string
+  logo?: string
+  headline?: string
+  employees?: number
+  revenueRange?: IOrganizationRevenueRange
+  location?: string
+  type?: string
+  size?: string
+  industry?: string
+  founded?: number
+  displayName?: string
+  employeeChurnRate?: Record<string, number>
+  employeeGrowthRate?: Record<string, number>
+
+  attributes?: any // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface IMemberOrganization {
@@ -65,51 +58,12 @@ export interface IMemberOrganization {
   createdAt?: string
   source?: string
   deletedAt?: string
+  displayName?: string
 }
 
-export interface IOrganizationCache {
-  id?: string
-  url?: string
-  description?: string
-  emails?: string[]
-  logo?: string
-  tags?: string[]
-  github?: IOrganizationSocial
-  twitter?: IOrganizationSocial
-  linkedin?: IOrganizationSocial
-  crunchbase?: IOrganizationSocial
-  employees?: number
-  location?: string
-  website?: string
-  type?: string
-  size?: string
-  headline?: string
-  industry?: string
-  founded?: string
-  attributes?: IAttributes
-  immediateParent?: string
-  ultimateParent?: string
-  affiliatedProfiles?: string[]
-  allSubsidiaries?: string[]
-  alternativeDomains?: string[]
-  alternativeNames?: string[]
-  averageEmployeeTenure?: number
-  averageTenureByLevel?: Record<string, number>
-  averageTenureByRole?: Record<string, number>
-  employeeChurnRate?: Record<string, number>
-  employeeCountByMonth?: Record<string, number>
-  employeeGrowthRate?: Record<string, number>
-  employeeCountByMonthByLevel?: Record<string, number>
-  employeeCountByMonthByRole?: Record<string, number>
-  directSubsidiaries?: string[]
-  gicsSector?: string
-  grossAdditionsByMonth?: Record<string, number>
-  grossDeparturesByMonth?: Record<string, number>
-  identities: IOrganizationIdentity[]
-  weakIdentities?: IOrganizationIdentity[]
-  members?: string[]
-  source?: OrganizationSource
-  name?: string
+export interface IMemberRoleWithOrganization extends IMemberOrganization {
+  organizationName: string
+  organizationLogo: string
 }
 
 export interface IExecutiveChange {
@@ -131,12 +85,6 @@ export interface IOrganizationSocial {
   url?: string
 }
 
-export interface IOrganizationOpensearch {
-  id: string
-  logo: string
-  displayName: string
-}
-
 export interface IOrganizationSyncRemoteData {
   id?: string
   organizationId: string
@@ -151,13 +99,10 @@ export interface IOrganizationIdentity {
   organizationId?: string
   integrationId?: string
   platform: string
-  name: string
+  value: string
+  type: OrganizationIdentityType
+  verified: boolean
   sourceId?: string
-  url?: string
-}
-
-export interface IEnrichableOrganization extends IOrganization {
-  orgActivityCount: number
 }
 
 export interface IOrganizationMergeSuggestion {
@@ -167,4 +112,121 @@ export interface IOrganizationMergeSuggestion {
 export interface IOrganizationIdSource {
   id: string
   source: string
+}
+
+export interface IOrganizationRevenueRange {
+  min: number
+  max: number
+}
+
+export interface IOrganizationNaics {
+  sector: string
+  naics_code: string
+  sub_sector: string
+  industry_group: string
+  naics_industry: string
+  national_industry: string
+}
+
+export interface IOrganizationAddress {
+  name: string
+  metro: string
+  region: string
+  country: string
+  locality: string
+  continent: string
+  postal_code: string
+  address_line_2: string
+  street_address: string
+}
+
+export interface ILLMConsumableOrganizationDbResult {
+  displayName: string
+  description: string
+  phoneNumbers: string[]
+  logo: string
+  tags: string[]
+  location: string
+  type: string
+  geoLocation: string
+  ticker: string
+  profiles: string[]
+  headline: string
+  industry: string
+  founded: number
+  alternativeNames: string[]
+  identities: IOrganizationIdentity[]
+}
+
+export interface ILLMConsumableOrganization {
+  displayName: string
+  description: string
+  phoneNumbers: string[]
+  logo: string
+  tags: string[]
+  location: string
+  type: string
+  geoLocation: string
+  ticker: string
+  profiles: string[]
+  headline: string
+  industry: string
+  founded: number
+  alternativeNames: string[]
+  identities: {
+    platform: string
+    value: string
+  }[]
+}
+
+export interface IOrganizationOpensearch {
+  uuid_organizationId: string
+  uuid_tenantId?: string
+  keyword_displayName: string
+  nested_identities: IOrganizationIdentityOpensearch[]
+  string_location: string
+  string_industry: string
+  string_website: string
+  string_ticker: string
+  int_activityCount: number
+}
+
+export interface IOrganizationIdentityOpensearch {
+  string_platform: string
+  string_type: string
+  keyword_type: string
+  string_value: string
+  bool_verified: boolean
+}
+
+export interface IOrganizationFullAggregatesOpensearch
+  extends IOrganizationBaseForMergeSuggestions {
+  ticker: string
+  identities: IOrganizationIdentity[]
+  activityCount: number
+  noMergeIds: string[]
+  website: string
+}
+
+export interface IDbOrganizationSyncData {
+  // base
+  organizationId: string
+  tenantId: string
+  displayName: string
+
+  ticker: string | null
+  industry: string | null
+  location: string | null
+
+  activityCount: number
+
+  identities: IOrganizationIdentity[]
+}
+
+export interface IOrganizationBaseForMergeSuggestions {
+  id: string
+  tenantId: string
+  displayName: string
+  location: string
+  industry: string
 }

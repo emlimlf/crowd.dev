@@ -1,6 +1,29 @@
 import { PlatformType } from './enums/platforms'
 import { IMemberData } from './members'
 
+export interface IActivityCreateData {
+  id?: string
+  type: string
+  isContribution: boolean
+  score: number
+  timestamp: Date
+  platform: string
+  sourceId: string
+  sourceParentId?: string
+  memberId: string
+  username: string
+  objectMemberId?: string
+  objectMemberUsername?: string
+  attributes: Record<string, unknown>
+  body?: string
+  title?: string
+  channel?: string
+  url?: string
+  tenantId?: string
+  organizationId?: string
+  segmentId?: string
+}
+
 export interface IActivityData {
   /**
    * Type of activity.
@@ -17,7 +40,7 @@ export interface IActivityData {
    * Timestamp of the activity.
    * ISO 8601 format string.
    */
-  timestamp: string
+  timestamp?: string
 
   /**
    * How much does this activity matter.
@@ -98,6 +121,7 @@ export enum ActivityDisplayVariant {
   DEFAULT = 'default',
   SHORT = 'short',
   CHANNEL = 'channel',
+  AUTHOR = 'author',
 }
 
 export type ActivityTypeSettings = {
@@ -110,6 +134,7 @@ export type DefaultActivityTypes = {
     [key: string]: {
       display: ActivityTypeDisplayProperties
       isContribution: boolean
+      calculateSentiment: boolean
     }
   }
 }
@@ -119,6 +144,7 @@ export type CustomActivityTypes = {
     [key: string]: {
       display: ActivityTypeDisplayProperties
       isContribution: boolean
+      calculateSentiment: boolean
     }
   }
 }
@@ -127,6 +153,7 @@ export type ActivityTypeDisplayProperties = {
   [ActivityDisplayVariant.DEFAULT]: string
   [ActivityDisplayVariant.SHORT]: string
   [ActivityDisplayVariant.CHANNEL]: string
+  [ActivityDisplayVariant.AUTHOR]?: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   formatter?: { [key: string]: (input: any) => string }
 }

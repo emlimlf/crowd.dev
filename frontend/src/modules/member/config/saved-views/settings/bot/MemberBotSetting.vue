@@ -1,14 +1,14 @@
 <template>
   <article>
     <p class="text-xs font-semibold leading-5 mb-3">
-      Bot contacts visibility
+      Bots visibility
     </p>
     <el-radio-group v-model="value" :disabled="props.settings?.teamMember === 'filter'">
       <el-radio :label="IncludeEnum.EXCLUDE" class="!h-5">
-        <span class="text-xs">Exclude bot contacts</span>
+        <span class="text-xs">Exclude bots</span>
       </el-radio>
       <el-radio :label="IncludeEnum.INCLUDE" class="!h-5">
-        <span class="text-xs">Include bot contacts</span>
+        <span class="text-xs">Include bots</span>
       </el-radio>
     </el-radio-group>
   </article>
@@ -51,6 +51,6 @@ watch(() => props.settings, (current) => {
 
 <script lang="ts">
 export default {
-  name: 'CrMemberTeamMemberSetting',
+  name: 'LfMemberTeamMemberSetting',
 };
 </script>

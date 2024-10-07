@@ -1,19 +1,28 @@
 <template>
-  <div class="mb-4">
-    <div class="flex justify-end pb-4">
-      <cr-filter-search v-model="filters.search" :placeholder="props.searchConfig.placeholder">
-        <template #append>
-          <cr-filter-dropdown v-model="filterList" :config="props.config" :custom-config="props.customConfig || {}" @open="open = $event" />
-        </template>
-      </cr-filter-search>
+  <div :class="Object.keys(props.config).length > 0 ? 'mb-4' : ''">
+    <div class="flex justify-end pb-4 gap-4">
+      <lf-filter-search
+        v-if="props.searchConfig"
+        v-model="filters.search"
+        :placeholder="props.searchConfig.placeholder"
+        class="!h-9"
+      />
+      <lf-filter-dropdown
+        v-if="Object.keys(props.config).length > 0"
+        v-model="filterList"
+        :config="props.config"
+        :custom-config="props.customConfig || {}"
+        @open="open = $event"
+      />
       <el-button
         v-if="isDeveloperModeActive && developerModeEnabled()"
-        class="btn btn-brand--secondary !bg-purple-100 !text-purple-600 ml-2"
+        class="btn btn-primary--secondary !bg-purple-100 !text-purple-600"
         @click="copyToClipboard"
       >
         <i class="ri-clipboard-line" />
         <span>Copy JSON query</span>
       </el-button>
+      <slot name="actions" />
     </div>
     <div class="flex items-center flex-wrap">
       <template v-for="(filter, fi) of filterList" :key="filter">
@@ -22,11 +31,13 @@
           effect="dark"
           :content="`${filters.relation} → ${filters.relation === 'and' ? 'or' : 'and'}`"
           placement="top"
+          :disabled="props.lockRelation"
         >
           <div
             v-if="fi > 0"
+            :click="!props.lockRelation ? 'cursor-pointer hover:bg-gray-100' : ''"
             class="border text-xs border-gray-100 rounded-md shadow justify-center
-          h-8 flex font-medium items-center py-1 px-2 bg-white cursor-pointer hover:bg-gray-100 transition mr-3 mb-4"
+          h-8 flex font-medium items-center py-1 px-2 bg-white  transition mr-3 mb-4"
             @click="switchOperator"
           >
             {{ filters.relation }}
@@ -34,7 +45,7 @@
         </el-tooltip>
 
         <!-- Filter -->
-        <cr-filter-item
+        <lf-filter-item
           v-model="filters[filter]"
           v-model:open="open"
           :config="configuration[filter]"
@@ -52,9 +63,9 @@ import {
   defineProps, onMounted, ref, watch,
 } from 'vue';
 import { Filter, FilterConfig } from '@/shared/modules/filters/types/FilterConfig';
-import CrFilterDropdown from '@/shared/modules/filters/components/FilterDropdown.vue';
-import CrFilterItem from '@/shared/modules/filters/components/FilterItem.vue';
-import CrFilterSearch from '@/shared/modules/filters/components/FilterSearch.vue';
+import LfFilterDropdown from '@/shared/modules/filters/components/FilterDropdown.vue';
+import LfFilterItem from '@/shared/modules/filters/components/FilterItem.vue';
+import LfFilterSearch from '@/shared/modules/filters/components/FilterSearch.vue';
 import { filterQueryService } from '@/shared/modules/filters/services/filter-query.service';
 import { SearchFilterConfig } from '@/shared/modules/filters/types/filterTypes/SearchFilterConfig';
 import { useRoute, useRouter } from 'vue-router';
@@ -65,18 +76,22 @@ import { useUserStore } from '@/modules/user/store/pinia';
 import Message from '@/shared/message/message';
 import { storeToRefs } from 'pinia';
 import { FeatureFlag } from '@/utils/featureFlag';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
 
 const props = defineProps<{
   modelValue: Filter,
   config: Record<string, FilterConfig>,
   customConfig?: Record<string, FilterConfig>,
-  searchConfig: SearchFilterConfig,
+  searchConfig?: SearchFilterConfig,
   savedViewsConfig?: SavedViewsConfig,
   hash?: string,
+  lockRelation?: boolean,
 }>();
 
 const emit = defineEmits<{(e: 'update:modelValue', value: Filter), (e: 'fetch', value: FilterQuery),}>();
 
+const { trackEvent } = useProductTracking();
 const router = useRouter();
 const route = useRoute();
 
@@ -103,6 +118,9 @@ const configuration = computed(() => ({
 const filterList = ref<string[]>([]);
 
 const switchOperator = () => {
+  if (props.lockRelation) {
+    return;
+  }
   filters.value.relation = filters.value.relation === 'and' ? 'or' : 'and';
 };
 
@@ -113,7 +131,7 @@ const alignFilterList = (value: Filter) => {
   filterList.value = Object.keys(filterValues);
 };
 
-const removeFilter = (key) => {
+const removeFilter = (key: string) => {
   open.value = '';
   filterList.value = filterList.value.filter((el) => el !== key);
   delete filters.value[key];
@@ -134,7 +152,35 @@ const fetch = (value: Filter) => {
 
 watch(() => filters.value, (value: Filter) => {
   fetch(value);
+
   const query = setQuery(value);
+
+  let key;
+  const { name: routeName, hash: routeHash } = router.currentRoute.value;
+
+  if (routeName === 'member') {
+    key = FeatureEventKey.FILTER_MEMBERS;
+  } else if (routeName === 'organization') {
+    key = FeatureEventKey.FILTER_ORGANIZATIONS;
+  } else if (routeName === 'activity' && routeHash === '#activity') {
+    key = FeatureEventKey.FILTER_ACTIVITIES;
+  } else if (routeName === 'activity' && routeHash === '#conversation') {
+    key = FeatureEventKey.FILTER_CONVERSATIONS;
+  } else {
+    key = null;
+  }
+
+  if (key) {
+    trackEvent({
+      key,
+      type: EventType.FEATURE,
+      properties: {
+        path: router.currentRoute.value.path,
+        filter: value,
+      },
+    });
+  }
+
   router.push({ query, hash: props.hash ? `#${props.hash}` : undefined });
 }, { deep: true });
 
@@ -190,6 +236,6 @@ const developerModeEnabled = () => FeatureFlag.isFlagEnabled(
 
 <script lang="ts">
 export default {
-  name: 'CrFilter',
+  name: 'LfFilter',
 };
 </script>

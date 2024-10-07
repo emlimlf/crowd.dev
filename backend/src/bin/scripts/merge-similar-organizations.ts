@@ -1,6 +1,7 @@
 import commandLineArgs from 'command-line-args'
 import commandLineUsage from 'command-line-usage'
 import { QueryTypes } from 'sequelize'
+import { MergeActionType, MergeActionState } from '@crowd/types'
 import * as fs from 'fs'
 import path from 'path'
 import SequelizeRepository from '../../database/repositories/sequelizeRepository'
@@ -8,11 +9,7 @@ import TenantService from '@/services/tenantService'
 import OrganizationService from '@/services/organizationService'
 import getUserContext from '@/database/utils/getUserContext'
 import { IRepositoryOptions } from '@/database/repositories/IRepositoryOptions'
-import {
-  MergeActionState,
-  MergeActionType,
-  MergeActionsRepository,
-} from '@/database/repositories/mergeActionsRepository'
+import { MergeActionsRepository } from '@/database/repositories/mergeActionsRepository'
 
 /* eslint-disable no-console */
 
@@ -148,16 +145,19 @@ if (parameters.help || (!parameters.tenant && !parameters.allTenants)) {
                 row.organizationId,
                 row.toMergeId,
                 userContext,
+                undefined,
               )
-              await orgService.mergeSync(row.organizationId, row.toMergeId)
+              await orgService.mergeSync(row.organizationId, row.toMergeId, null)
             } catch (err) {
               console.log('Error merging organizations - continuing with the rest', err)
-              await MergeActionsRepository.setState(
+              await MergeActionsRepository.setMergeAction(
                 MergeActionType.ORG,
                 row.organizationId,
                 row.toMergeId,
-                MergeActionState.ERROR,
                 userContext,
+                {
+                  state: MergeActionState.ERROR,
+                },
               )
             }
 

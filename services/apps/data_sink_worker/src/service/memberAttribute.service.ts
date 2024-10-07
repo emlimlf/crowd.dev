@@ -1,27 +1,41 @@
-import MemberAttributeSettingsRepository from '../repo/memberAttributeSettings.repo'
-import { DbStore } from '@crowd/database'
+import { dbStoreQx } from '@crowd/data-access-layer/src/queryExecutor'
+import { DbStore } from '@crowd/data-access-layer/src/database'
 import { Logger, LoggerBase } from '@crowd/logging'
 import { MemberAttributeType } from '@crowd/types'
+import { RedisClient } from '@crowd/redis'
+import {
+  getMemberAttributeSettings,
+  getPlatformPriorityArray,
+} from '@crowd/data-access-layer/src/members/attributeSettings'
 
 export default class MemberAttributeService extends LoggerBase {
-  private readonly repo: MemberAttributeSettingsRepository
-
-  constructor(store: DbStore, parentLog: Logger) {
+  constructor(
+    private readonly redis: RedisClient,
+    private readonly store: DbStore,
+    parentLog: Logger,
+  ) {
     super(parentLog)
-
-    this.repo = new MemberAttributeSettingsRepository(store, parentLog)
   }
 
   public async setAttributesDefaultValues(
     tenantId: string,
     attributes: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    const priorities = await this.repo.getPlatformPriorityArray(tenantId)
+    const priorities = await getPlatformPriorityArray(dbStoreQx(this.store), tenantId)
     if (!priorities) {
       throw new Error(`No priorities set for tenant '${tenantId}'!`)
     }
 
     for (const attributeName of Object.keys(attributes)) {
+      if (typeof attributes[attributeName] === 'string') {
+        // we try to fix it
+        try {
+          attributes[attributeName] = JSON.parse(attributes[attributeName] as string)
+        } catch (err) {
+          this.log.error(err, { attributeName }, 'Could not parse a string attribute value!')
+          throw err
+        }
+      }
       const highestPriorityPlatform =
         MemberAttributeService.getHighestPriorityPlatformForAttributes(
           Object.keys(attributes[attributeName]),
@@ -55,7 +69,7 @@ export default class MemberAttributeService extends LoggerBase {
     tenantId: string,
     attributes: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    const settings = await this.repo.getMemberAttributeSettings(tenantId)
+    const settings = await getMemberAttributeSettings(dbStoreQx(this.store), this.redis, tenantId)
     const memberAttributeSettings = settings.reduce((acc, attribute) => {
       acc[attribute.name] = attribute
       return acc

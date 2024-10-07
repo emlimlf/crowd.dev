@@ -1,18 +1,18 @@
 <template>
   <div>
     <el-dropdown
-      v-if="!isReadOnly"
+      v-if="hasPermission(LfPermission.activityEdit)"
       placement="bottom-end"
       trigger="click"
       @command="$event()"
       @visible-change="dropdownVisible = $event"
     >
       <button
-        class="el-dropdown-link btn p-1.5 rounder-md hover:bg-gray-200 text-gray-600"
+        class="el-dropdown-link btn p-1.5 rounder-md hover:bg-gray-200 text-gray-400"
         type="button"
         @click.stop
       >
-        <i class="text-xl ri-more-fill" />
+        <i class="text-lg ri-more-fill" />
       </button>
       <template #dropdown>
         <app-lf-activity-affiliations
@@ -31,18 +31,12 @@
             </el-dropdown-item>
             <el-dropdown-item
               :command="doDestroyWithConfirm"
-              :disabled="isDeleteLockedForSampleData"
             >
               <i
-                class="ri-delete-bin-line mr-1"
-                :class="{
-                  'text-red-500': !isDeleteLockedForSampleData,
-                }"
+                class="ri-delete-bin-line mr-1 text-red-500"
               />
               <span
-                :class="{
-                  'text-red-500': !isDeleteLockedForSampleData,
-                }"
+                class="text-red-500"
               >Delete activity</span>
             </el-dropdown-item>
           </template>
@@ -53,15 +47,17 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { ActivityPermissions } from '@/modules/activity/activity-permissions';
+import { ref } from 'vue';
 import ConfirmDialog from '@/shared/dialog/confirm-dialog';
-import { mapGetters } from '@/shared/vuex/vuex.helpers';
 import AppLfActivityAffiliations from '@/modules/lf/activity/components/lf-activity-affiliations.vue';
 import Errors from '@/shared/error/errors';
 import { ActivityService } from '@/modules/activity/activity-service';
 import Message from '@/shared/message/message';
 import { i18n } from '@/i18n';
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
+import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
 
 const emit = defineEmits(['onUpdate', 'edit']);
 const props = defineProps({
@@ -84,17 +80,10 @@ const props = defineProps({
 });
 
 const dropdownVisible = ref(false);
-const { currentTenant, currentUser } = mapGetters('auth');
 
-const isReadOnly = computed(() => new ActivityPermissions(
-  currentTenant.value,
-  currentUser.value,
-).edit === false);
+const { trackEvent } = useProductTracking();
 
-const isDeleteLockedForSampleData = computed(() => new ActivityPermissions(
-  currentTenant.value,
-  currentUser.value,
-).destroyLockedForSampleData);
+const { hasPermission } = usePermissions();
 
 const editActivity = () => {
   emit('edit');
@@ -112,6 +101,15 @@ const doDestroyWithConfirm = async () => {
   }).then(() => {
     ActivityService.destroyAll([props.activity.id], [props.activity.segmentId])
       .then(() => {
+        trackEvent({
+          key: FeatureEventKey.DELETE_ACTIVITY,
+          type: EventType.FEATURE,
+          properties: {
+            activityType: props.activity.type,
+            activityPlatform: props.activity.platform,
+          },
+        });
+
         Message.success(
           i18n('entities.activity.destroy.success'),
         );

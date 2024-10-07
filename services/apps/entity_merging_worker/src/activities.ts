@@ -1,8 +1,21 @@
-export { deleteMember, moveActivitiesBetweenMembers } from './activities/members'
+export {
+  deleteMember,
+  moveActivitiesBetweenMembers,
+  moveActivitiesWithIdentityToAnotherMember,
+  recalculateActivityAffiliationsOfMemberAsync,
+  syncMember,
+  notifyFrontendMemberMergeSuccessful,
+  notifyFrontendMemberUnmergeSuccessful,
+  syncRemoveMember,
+} from './activities/members'
 
 export {
   deleteOrganization,
   moveActivitiesBetweenOrgs,
-  markMergeActionDone,
-  notifyFrontend,
+  notifyFrontendOrganizationMergeSuccessful,
+  notifyFrontendOrganizationUnmergeSuccessful,
+  syncOrganization,
+  recalculateActivityAffiliationsOfOrganizationSynchronous,
 } from './activities/organizations'
+
+export { setMergeAction } from './activities/common'

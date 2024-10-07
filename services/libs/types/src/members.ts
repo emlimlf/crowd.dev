@@ -1,6 +1,6 @@
 import { IAttributes } from './attributes'
-import { MemberAttributeType } from './enums/members'
-import { IOrganization, IOrganizationOpensearch } from './organizations'
+import { MemberAttributeOpensearch, MemberAttributeType, MemberIdentityType } from './enums/members'
+import { IMemberOrganization, IOrganization, IOrganizationOpensearch } from './organizations'
 import { ITagOpensearch } from './tags'
 import { PlatformType } from './enums/platforms'
 
@@ -13,17 +13,34 @@ export interface IMemberAttribute {
   options?: string[]
 }
 
+export interface IMemberAttributeData extends IMemberAttribute {
+  id: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface IMemberIdentity {
+  id?: string
   sourceId?: string
   platform: string
+  value: string
+  type: MemberIdentityType
+  tenantId?: string
+  integrationId?: string
+  memberId?: string
+  createdAt?: string
+  updatedAt?: string
+  verified: boolean
+}
+
+export interface IActivityIdentity {
   username: string
+  platform: string
 }
 
 export interface IMemberData {
   displayName?: string
-  emails?: string[]
   identities: IMemberIdentity[]
-  weakIdentities?: IMemberIdentity[]
   attributes?: Record<string, unknown>
   joinedAt?: string
   organizations?: IOrganization[]
@@ -35,7 +52,7 @@ export interface IMember {
   tenantId: string
   segmentId: string
   attributes: IAttributes
-  emails: string[]
+  name?: string // Deprecated
   displayName?: string
   avatarUrl?: string
   score: number
@@ -55,17 +72,11 @@ export interface IMember {
   tags: ITagOpensearch[]
   toMergeIds: string[]
   noMergeIds: string[]
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  username: PlatformIdentities
   lastActivity: unknown
   bio?: string
   location?: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   contributions?: any
-}
-
-export type PlatformIdentities = {
-  [K in keyof typeof PlatformType]?: [MemberIdentity]
 }
 
 export interface MemberIdentity {
@@ -88,4 +99,130 @@ export interface IMemberMergeSuggestion {
   similarity: number
   activityEstimate: number
   members: [string, string]
+}
+
+export interface IMemberReach {
+  [key: string]: number
+}
+
+export interface IMemberUsername {
+  [key: string]: string[]
+}
+
+export interface IMemberAffiliation {
+  id: string
+  dateStart: string
+  dateEnd: string
+  segmentId: string
+  segmentName: string
+  segmentSlug: string
+  organizationId: string
+  organizationLogo: string
+  organizationName: string
+  segmentParentName: string
+}
+
+export interface IMemberAffiliationMergeBackup {
+  id: string
+}
+
+export interface IMemberContribution {
+  id: number
+  url: string
+  topics: string[]
+  summary: string
+  numberCommits: 81
+  lastCommitDate: string
+  firstCommitDate: string
+}
+
+export interface IMemberRenderFriendlyRole {
+  id: string
+  logo: string
+  displayName: string
+  memberOrganizations: IMemberOrganization
+}
+
+export interface ILLMConsumableMemberDbResult {
+  displayName: string
+  attributes: IAttributes
+  joinedAt: string
+  identities: IMemberIdentity[]
+  organizations: {
+    logo: string
+    displayName: string
+    title: string
+    dateStart: string
+    dateEnd: string
+    memberId: string
+  }[]
+}
+
+export interface ILLMConsumableMember {
+  displayName: string
+  attributes: IAttributes
+  joinedAt: string
+  identities: {
+    platform: string
+    value: string
+  }[]
+  organizations: {
+    logo: string
+    displayName: string
+    title: string
+    dateStart: string
+    dateEnd: string
+  }[]
+}
+
+export interface IMemberBaseForMergeSuggestions {
+  id: string
+  tenantId: string
+  displayName: string
+  attributes: IAttributes
+}
+
+export interface IMemberWithAggregatesForMergeSuggestions extends IMemberBaseForMergeSuggestions {
+  identities: IMemberIdentity[]
+  activityCount: number
+  organizations: IMemberOrganization[]
+}
+
+export interface IMemberIdentityOpensearch {
+  keyword_type: string
+  string_platform: string
+  keyword_value: string
+  string_value: string
+  bool_verified: boolean
+}
+
+export interface IMemberOrganizationOpensearch {
+  uuid_id: string
+  string_logo: string
+  string_displayName: string
+  obj_memberOrganizations: {
+    string_title: string
+    date_dateStart: string
+    date_dateEnd: string
+    string_source: string
+  }
+}
+
+export type IMemberAttributesOpensearch = {
+  [key in MemberAttributeOpensearch]?: {
+    string_default?: string
+    string_arr_default?: string[]
+  }
+}
+
+export interface IMemberOpensearch {
+  uuid_memberId: string
+  uuid_tenantId: string
+  keyword_displayName: string
+  string_displayName: string
+  int_activityCount: number
+
+  nested_identities: IMemberIdentityOpensearch[]
+  nested_organizations: IMemberOrganizationOpensearch[]
+  obj_attributes: IMemberAttributesOpensearch
 }

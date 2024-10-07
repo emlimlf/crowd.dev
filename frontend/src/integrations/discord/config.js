@@ -16,6 +16,7 @@ export default {
   url: ({ username }) => (username ? `https://discord.com/${username}` : null),
   chartColor: '#6875FF',
   showProfileLink: false,
+  placeholder: 'Discord username',
   activityDisplay: {
     showLinkToUrl: true,
   },
@@ -25,8 +26,5 @@ export default {
       copy: 'reply',
       number: conversation.activityCount - 1,
     }),
-  },
-  organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
   },
 };

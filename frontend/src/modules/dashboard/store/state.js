@@ -9,9 +9,10 @@ export default () => ({
       childSegments: [],
     },
   },
+  chartData: null,
   conversations: {
     loading: false,
-    trending: [],
+    recent: [],
     total: 0,
   },
   activities: {

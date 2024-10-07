@@ -1,12 +1,15 @@
 import Layout from '@/modules/layout/components/layout.vue';
-import Permissions from '@/security/permissions';
 import { store } from '@/store';
+import { PermissionGuard } from '@/shared/modules/permissions/router/PermissionGuard';
+import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
+import { PageEventKey } from '@/shared/modules/monitoring/types/event';
 
 const OrganizationListPage = () => import(
   '@/modules/organization/pages/organization-list-page.vue'
 );
-const OrganizationViewPage = () => import(
-  '@/modules/organization/pages/organization-view-page.vue'
+
+const OrganizationDetailsPage = () => import(
+  '@/modules/organization/pages/organization-details.page.vue'
 );
 
 const OrganizationFormPage = () => import(
@@ -26,9 +29,6 @@ export default [
     meta: {
       auth: true,
       title: 'Organizations',
-      segments: {
-        requireSelectedProjectGroup: true,
-      },
     },
     children: [
       {
@@ -37,40 +37,34 @@ export default [
         component: OrganizationsMainPage,
         meta: {
           auth: true,
-          permission: Permissions.values.organizationRead,
+          eventKey: PageEventKey.ORGANIZATIONS,
+          segments: {
+            requireSelectedProjectGroup: true,
+          },
         },
         props: {
           module: 'organizations',
         },
-      },
-      {
-        name: 'organizationCreate',
-        path: '/organizations/new',
-        component: OrganizationFormPage,
-        meta: {
-          auth: true,
-          permission: Permissions.values.organizationCreate,
-        },
-      },
-      {
-        name: 'organizationEdit',
-        path: '/organizations/:id/edit',
-        component: OrganizationFormPage,
-        meta: {
-          auth: true,
-          permission: Permissions.values.organizationEdit,
-        },
-        props: true,
+        beforeEnter: [
+          PermissionGuard(LfPermission.organizationRead),
+        ],
       },
       {
         name: 'organizationView',
         path: '/organizations/:id',
-        component: OrganizationViewPage,
+        component: OrganizationDetailsPage,
         meta: {
+          title: 'Organization',
           auth: true,
-          permission: Permissions.values.organizationRead,
+          eventKey: PageEventKey.ORGANIZATION_PROFILE,
+          segments: {
+            optionalSelectedProjectGroup: true,
+          },
         },
         props: true,
+        beforeEnter: [
+          PermissionGuard(LfPermission.organizationRead),
+        ],
       },
       {
         name: 'organizationMergeSuggestions',
@@ -78,9 +72,15 @@ export default [
         component: OrganizationMergeSuggestionsPage,
         meta: {
           auth: true,
-          permission: Permissions.values.mergeOrganizations,
+          eventKey: PageEventKey.ORGANIZATIONS_MERGE_SUGGESTIONS,
+          segments: {
+            requireSelectedProjectGroup: true,
+          },
         },
         props: true,
+        beforeEnter: [
+          PermissionGuard(LfPermission.mergeOrganizations),
+        ],
       },
     ],
   },

@@ -8,7 +8,7 @@
       <div class="-mt-4">
         <app-form-item
           class="mb-4"
-          label="Contributor"
+          label="Person"
           :validation="$v.member"
           :required="true"
           :error-messages="{
@@ -88,7 +88,7 @@
           >
             <el-option
               :value="null"
-              class="px-3 py-2.5 text-brand-500 text-xs leading-5 transition hover:bg-gray-50 cursor-pointer"
+              class="px-3 py-2.5 text-primary-500 text-xs leading-5 transition hover:bg-gray-50 cursor-pointer"
               @click="emit('add-activity-type')"
             >
               + Add activity type
@@ -184,6 +184,8 @@ import formChangeDetector from '@/shared/form/form-change';
 import AppAutocompleteOneInput from '@/shared/form/autocomplete-one-input.vue';
 import { useActivityStore } from '@/modules/activity/store/pinia';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
 
 // Props & emits
 const props = defineProps({
@@ -206,6 +208,8 @@ const emit = defineEmits([
   'update:modelValue',
   'add-activity-type',
 ]);
+
+const { trackEvent } = useProductTracking();
 
 // Store
 const activityTypeStore = useActivityTypeStore();
@@ -252,13 +256,11 @@ const rules = {
 const $v = useVuelidate(rules, form);
 
 // Members field
-const searchMembers = ({ query, limit }) => MemberService.listAutocomplete({
+const searchMembers = ({ query, limit }) => MemberService.listMembersAutocomplete({
   query,
   limit,
   segments: [props.subprojectId],
-}).catch(
-  () => [],
-);
+});
 
 // Datetime field
 const CalendarIcon = h(
@@ -333,6 +335,14 @@ const submit = () => {
   };
 
   if (!isEdit.value) {
+    trackEvent({
+      key: FeatureEventKey.ADD_ACTIVITY,
+      type: EventType.FEATURE,
+      properties: {
+        ...data,
+      },
+    });
+
     // Create
     ActivityService.create({
       data: {
@@ -352,6 +362,14 @@ const submit = () => {
         );
       });
   } else {
+    trackEvent({
+      key: FeatureEventKey.EDIT_ACTIVITY,
+      type: EventType.FEATURE,
+      properties: {
+        ...data,
+      },
+    });
+
     // Update
     ActivityService.update(props.activity.id, data, segments)
       .then(() => {

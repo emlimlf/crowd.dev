@@ -1,19 +1,15 @@
 import { LfService } from '@/modules/lf/segments/lf-segments-service';
 import Message from '@/shared/message/message';
 import { router } from '@/router';
-import { store } from '@/store';
-import { computed } from 'vue';
-import { PermissionChecker } from '@/modules/user/permission-checker';
-import Roles from '@/security/roles';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import { storeToRefs } from 'pinia';
+import { LfRole } from '@/shared/modules/permissions/types/Roles';
 
 const isAdminOnly = () => {
-  const currentUser = store.getters['auth/currentUser'];
-  const currentTenant = store.getters['auth/currentTenant'];
+  const authStore = useAuthStore();
+  const { roles } = storeToRefs(authStore);
 
-  return new PermissionChecker(
-    currentTenant,
-    currentUser,
-  ).currentUserRolesIds.includes(Roles.values.projectAdmin);
+  return roles.value.includes(LfRole.projectAdmin);
 };
 
 export default {

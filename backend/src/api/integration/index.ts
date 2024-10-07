@@ -1,5 +1,6 @@
 import passport from 'passport'
 import { FeatureFlag } from '@crowd/types'
+import { RedisCache } from '@crowd/redis'
 import { API_CONFIG, SLACK_CONFIG, TWITTER_CONFIG } from '../../conf'
 import SegmentRepository from '../../database/repositories/segmentRepository'
 import { authMiddleware } from '../../middlewares/authMiddleware'
@@ -47,6 +48,18 @@ export default (app) => {
   app.put(`/reddit-onboard/:tenantId`, safeWrap(require('./helpers/redditOnboard').default))
   app.put('/linkedin-connect/:tenantId', safeWrap(require('./helpers/linkedinConnect').default))
   app.post('/linkedin-onboard/:tenantId', safeWrap(require('./helpers/linkedinOnboard').default))
+
+  app.post(
+    `/tenant/:tenantId/integration/progress/list`,
+    safeWrap(require('./integrationProgressList').default),
+  )
+
+  app.get(
+    `/tenant/:tenantId/integration/progress/:id`,
+    safeWrap(require('./integrationProgress').default),
+  )
+
+  // Git
   app.put(`/tenant/:tenantId/git-connect`, safeWrap(require('./helpers/gitAuthenticate').default))
   app.get('/tenant/:tenantId/git', safeWrap(require('./helpers/gitGetRemotes').default))
   app.put(
@@ -171,6 +184,37 @@ export default (app) => {
     safeWrap(require('./helpers/groupsioVerifyGroup').default),
   )
 
+  app.post(
+    '/tenant/:tenantId/jira-connect',
+    safeWrap(require('./helpers/jiraConnectOrUpdate').default),
+  )
+
+  app.get(
+    '/tenant/:tenantId/github-installations',
+    safeWrap(require('./helpers/getGithubInstallations').default),
+  )
+
+  app.post(
+    '/tenant/:tenantId/github-connect-installation',
+    safeWrap(require('./helpers/githubConnectInstallation').default),
+  )
+
+  app.get('/gitlab/:tenantId/connect', safeWrap(require('./helpers/gitlabAuthenticate').default))
+
+  app.get(
+    '/gitlab/:tenantId/callback',
+    safeWrap(require('./helpers/gitlabAuthenticateCallback').default),
+  )
+
+  app.put(
+    `/tenant/:tenantId/integration/:id/gitlab/repos`,
+    safeWrap(require('./helpers/gitlabMapRepos').default),
+  )
+  app.get(
+    `/tenant/:tenantId/integration/:id/gitlab/repos`,
+    safeWrap(require('./helpers/gitlabMapReposGet').default),
+  )
+
   if (TWITTER_CONFIG.clientId) {
     /**
      * Using the passport.authenticate this endpoint forces a
@@ -211,21 +255,29 @@ export default (app) => {
       //   session: false,
       //   failureRedirect: `${API_CONFIG.frontendUrl}/integrations?error=true`,
       // }),
-      (req, _res, next) => {
+      async (req, _res, next) => {
         const stateQueryParam = req.query.state
         const decodedState = decodeBase64Url(stateQueryParam)
-        const stateObject = JSON.parse(decodedState)
-        const { crowdToken } = stateObject
+        req.state = JSON.parse(decodedState)
+        next()
+      },
+      (req, _res, next) => {
+        const { crowdToken } = req.state
         req.headers.authorization = `Bearer ${crowdToken}`
         next()
       },
       authMiddleware,
       async (req, _res, next) => {
-        const stateQueryParam = req.query.state
-        const decodedState = decodeBase64Url(stateQueryParam)
-        const stateObject = JSON.parse(decodedState)
-        const { tenantId } = stateObject
+        const { tenantId } = req.state
         req.currentTenant = await new TenantService(req).findById(tenantId)
+        next()
+      },
+      async (req, _res, next) => {
+        const cache = new RedisCache('twitterPKCE', req.redis, req.log)
+        const state = await cache.get(req.currentUser.id)
+        const { segmentIds } = JSON.parse(state)
+        const segmentRepository = new SegmentRepository(req)
+        req.currentSegments = await segmentRepository.findInIds(segmentIds)
         next()
       },
       safeWrap(require('./helpers/twitterAuthenticateCallback').default),

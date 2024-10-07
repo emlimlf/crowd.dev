@@ -1,13 +1,19 @@
 import { Client as TemporalClient, WorkflowIdReusePolicy } from '@crowd/temporal'
-import { IDbMember, IDbMemberUpdateData } from '../repo/member.data'
-import MemberRepository from '../repo/member.repo'
 import {
-  firstArrayContainsSecondArray,
+  IDbMember,
+  IDbMemberUpdateData,
+} from '@crowd/data-access-layer/src/old/apps/data_sink_worker/repo/member.data'
+import MemberRepository from '@crowd/data-access-layer/src/old/apps/data_sink_worker/repo/member.repo'
+import {
   isObjectEmpty,
   singleOrDefault,
   isDomainExcluded,
+  isEmail,
+  EDITION,
+  getProperDisplayName,
+  getEarliestValidDate,
 } from '@crowd/common'
-import { DbStore } from '@crowd/database'
+import { DbStore } from '@crowd/data-access-layer/src/database'
 import { Logger, LoggerBase, getChildLogger } from '@crowd/logging'
 import {
   IMemberData,
@@ -16,26 +22,26 @@ import {
   OrganizationSource,
   IOrganizationIdSource,
   TemporalWorkflowId,
+  MemberIdentityType,
+  Edition,
+  OrganizationIdentityType,
+  OrganizationAttributeSource,
 } from '@crowd/types'
 import mergeWith from 'lodash.mergewith'
 import isEqual from 'lodash.isequal'
-import moment from 'moment-timezone'
 import { IMemberCreateData, IMemberUpdateData } from './member.data'
 import MemberAttributeService from './memberAttribute.service'
-import IntegrationRepository from '../repo/integration.repo'
+import IntegrationRepository from '@crowd/data-access-layer/src/old/apps/data_sink_worker/repo/integration.repo'
 import { OrganizationService } from './organization.service'
 import uniqby from 'lodash.uniqby'
-import { Unleash } from '@crowd/feature-flags'
 import { TEMPORAL_CONFIG } from '../conf'
 import { RedisClient } from '@crowd/redis'
-import { NodejsWorkerEmitter, SearchSyncWorkerEmitter } from '@crowd/common_services'
+import { SearchSyncWorkerEmitter } from '@crowd/common_services'
 
 export default class MemberService extends LoggerBase {
   constructor(
     private readonly store: DbStore,
-    private readonly nodejsWorkerEmitter: NodejsWorkerEmitter,
     private readonly searchSyncWorkerEmitter: SearchSyncWorkerEmitter,
-    private readonly unleash: Unleash | undefined,
     private readonly temporal: TemporalClient,
     private readonly redisClient: RedisClient,
     parentLog: Logger,
@@ -49,11 +55,15 @@ export default class MemberService extends LoggerBase {
     segmentId: string,
     integrationId: string,
     data: IMemberCreateData,
+    source: string,
     fireSync = true,
     releaseMemberLock?: () => Promise<void>,
   ): Promise<string> {
     try {
       this.log.debug('Creating a new member!')
+
+      // prevent empty identity handles
+      data.identities = data.identities.filter((i) => i.value)
 
       if (data.identities.length === 0) {
         throw new Error('Member must have at least one identity!')
@@ -61,7 +71,11 @@ export default class MemberService extends LoggerBase {
 
       const { id, organizations } = await this.store.transactionally(async (txStore) => {
         const txRepo = new MemberRepository(txStore, this.log)
-        const txMemberAttributeService = new MemberAttributeService(txStore, this.log)
+        const txMemberAttributeService = new MemberAttributeService(
+          this.redisClient,
+          txStore,
+          this.log,
+        )
 
         let attributes: Record<string, unknown> = {}
         if (data.attributes) {
@@ -73,15 +87,13 @@ export default class MemberService extends LoggerBase {
           )
         }
 
-        // check if any weak identities are actually strong
-        await this.checkForStrongWeakIdentities(txRepo, tenantId, data)
+        // validate emails
+        data.identities = this.validateEmails(data.identities)
 
         const id = await txRepo.create(tenantId, {
-          displayName: data.displayName,
-          emails: data.emails,
+          displayName: getProperDisplayName(data.displayName),
           joinedAt: data.joinedAt.toISOString(),
           attributes,
-          weakIdentities: data.weakIdentities || [],
           identities: data.identities,
           reach: MemberService.calculateReach({}, data.reach),
         })
@@ -98,7 +110,7 @@ export default class MemberService extends LoggerBase {
         const orgService = new OrganizationService(txStore, this.log)
         if (data.organizations) {
           for (const org of data.organizations) {
-            const id = await orgService.findOrCreate(tenantId, segmentId, integrationId, org)
+            const id = await orgService.findOrCreate(tenantId, source, integrationId, org)
             organizations.push({
               id,
               source: org.source,
@@ -106,12 +118,15 @@ export default class MemberService extends LoggerBase {
           }
         }
 
-        if (data.emails) {
+        const emailIdentities = data.identities.filter(
+          (i) => i.type === MemberIdentityType.EMAIL && i.verified,
+        )
+        if (emailIdentities.length > 0) {
           const orgs = await this.assignOrganizationByEmailDomain(
             tenantId,
             segmentId,
             integrationId,
-            data.emails,
+            emailIdentities.map((i) => i.value),
           )
           if (orgs.length > 0) {
             organizations.push(...orgs)
@@ -119,9 +134,23 @@ export default class MemberService extends LoggerBase {
         }
 
         if (organizations.length > 0) {
-          // remove dups
-          const uniqOrganizations = uniqby(organizations, 'id')
-          await orgService.addToMember(tenantId, segmentId, id, uniqOrganizations)
+          const uniqOrgs = uniqby(organizations, 'id')
+          const orgService = new OrganizationService(txStore, this.log)
+
+          const orgsToAdd = (
+            await Promise.all(
+              uniqOrgs.map(async (org) => {
+                // Check if the org was already added to the member in the past, including deleted ones.
+                // If it was, we ignore this org to prevent from adding it again.
+                const existingMemberOrgs = await orgService.findMemberOrganizations(id, org.id)
+                return existingMemberOrgs.length > 0 ? null : org
+              }),
+            )
+          ).filter((org) => org !== null)
+
+          if (orgsToAdd.length > 0) {
+            await orgService.addToMember(tenantId, segmentId, id, orgsToAdd)
+          }
         }
 
         return {
@@ -130,35 +159,51 @@ export default class MemberService extends LoggerBase {
         }
       })
 
-      const handle = await this.temporal.workflow.start('processNewMemberAutomation', {
-        workflowId: `${TemporalWorkflowId.NEW_MEMBER_AUTOMATION}/${id}`,
-        taskQueue: TEMPORAL_CONFIG().automationsTaskQueue,
-        workflowIdReusePolicy: WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-        retry: {
-          maximumAttempts: 100,
-        },
+      if (EDITION !== Edition.LFX) {
+        try {
+          const handle = await this.temporal.workflow.start('processNewMemberAutomation', {
+            workflowId: `${TemporalWorkflowId.NEW_MEMBER_AUTOMATION}/${id}`,
+            taskQueue: TEMPORAL_CONFIG().automationsTaskQueue,
+            workflowIdReusePolicy: WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+            retry: {
+              maximumAttempts: 100,
+            },
 
-        args: [
-          {
-            tenantId,
-            memberId: id,
-          },
-        ],
-        searchAttributes: {
-          TenantId: [tenantId],
-        },
-      })
-      this.log.info(
-        { workflowId: handle.workflowId },
-        'Started temporal workflow to process new member automation!',
-      )
+            args: [
+              {
+                tenantId,
+                memberId: id,
+              },
+            ],
+            searchAttributes: {
+              TenantId: [tenantId],
+            },
+          })
+
+          this.log.info(
+            { workflowId: handle.workflowId },
+            'Started temporal workflow to process new member automation!',
+          )
+        } catch (err) {
+          this.log.error(
+            err,
+            'Error while starting temporal workflow to process new member automation!',
+          )
+          throw err
+        }
+      }
 
       if (fireSync) {
-        await this.searchSyncWorkerEmitter.triggerMemberSync(tenantId, id, onboarding)
+        await this.searchSyncWorkerEmitter.triggerMemberSync(tenantId, id, onboarding, segmentId)
       }
 
       for (const org of organizations) {
-        await this.searchSyncWorkerEmitter.triggerOrganizationSync(tenantId, org.id, onboarding)
+        await this.searchSyncWorkerEmitter.triggerOrganizationSync(
+          tenantId,
+          org.id,
+          onboarding,
+          segmentId,
+        )
       }
 
       return id
@@ -176,13 +221,18 @@ export default class MemberService extends LoggerBase {
     integrationId: string,
     data: IMemberUpdateData,
     original: IDbMember,
+    source: string,
     fireSync = true,
     releaseMemberLock?: () => Promise<void>,
   ): Promise<void> {
     try {
       const { updated, organizations } = await this.store.transactionally(async (txStore) => {
         const txRepo = new MemberRepository(txStore, this.log)
-        const txMemberAttributeService = new MemberAttributeService(txStore, this.log)
+        const txMemberAttributeService = new MemberAttributeService(
+          this.redisClient,
+          txStore,
+          this.log,
+        )
         const dbIdentities = await txRepo.getIdentities(id, tenantId)
 
         if (data.attributes) {
@@ -192,8 +242,16 @@ export default class MemberService extends LoggerBase {
           )
         }
 
-        // check if any weak identities are actually strong
-        await this.checkForStrongWeakIdentities(txRepo, tenantId, data, id)
+        // prevent empty identity handles
+        data.identities = data.identities.filter((i) => i.value)
+
+        // validate emails
+        data.identities = this.validateEmails(data.identities)
+
+        // make sure displayName is proper
+        if (data.displayName) {
+          data.displayName = getProperDisplayName(data.displayName)
+        }
 
         const toUpdate = MemberService.mergeData(original, dbIdentities, data)
 
@@ -205,6 +263,10 @@ export default class MemberService extends LoggerBase {
         }
 
         let updated = false
+        const identitiesToCreate = toUpdate.identitiesToCreate
+        delete toUpdate.identitiesToCreate
+        const identitiesToUpdate = toUpdate.identitiesToUpdate
+        delete toUpdate.identitiesToUpdate
 
         if (!isObjectEmpty(toUpdate)) {
           this.log.debug({ memberId: id }, 'Updating a member!')
@@ -229,8 +291,13 @@ export default class MemberService extends LoggerBase {
           await txRepo.addToSegment(id, tenantId, segmentId)
         }
 
-        if (toUpdate.identities) {
-          await txRepo.insertIdentities(id, tenantId, integrationId, toUpdate.identities)
+        if (identitiesToCreate) {
+          await txRepo.insertIdentities(id, tenantId, integrationId, identitiesToCreate)
+          updated = true
+        }
+
+        if (identitiesToUpdate) {
+          await txRepo.updateIdentities(id, tenantId, identitiesToUpdate)
           updated = true
         }
 
@@ -242,25 +309,23 @@ export default class MemberService extends LoggerBase {
         const orgService = new OrganizationService(txStore, this.log)
         if (data.organizations) {
           for (const org of data.organizations) {
-            const id = await orgService.findOrCreate(tenantId, segmentId, integrationId, org)
+            const id = await orgService.findOrCreate(tenantId, source, integrationId, org)
             organizations.push({
               id,
               source: data.source,
             })
           }
-
-          if (organizations.length > 0) {
-            await orgService.addToMember(tenantId, segmentId, id, organizations)
-            updated = true
-          }
         }
 
-        if (data.emails) {
+        const emailIdentities = data.identities.filter(
+          (i) => i.verified && i.type === MemberIdentityType.EMAIL,
+        )
+        if (emailIdentities.length > 0) {
           const orgs = await this.assignOrganizationByEmailDomain(
             tenantId,
             segmentId,
             integrationId,
-            data.emails,
+            emailIdentities.map((i) => i.value),
           )
           if (orgs.length > 0) {
             organizations.push(...orgs)
@@ -268,21 +333,40 @@ export default class MemberService extends LoggerBase {
         }
 
         if (organizations.length > 0) {
-          // remove dups
-          const uniqOrganizations = uniqby(organizations, 'id')
-          await orgService.addToMember(tenantId, segmentId, id, uniqOrganizations)
-          updated = true
+          const uniqOrgs = uniqby(organizations, 'id')
+          const orgService = new OrganizationService(txStore, this.log)
+
+          const orgsToAdd = (
+            await Promise.all(
+              uniqOrgs.map(async (org) => {
+                // Check if the org was already added to the member in the past, including deleted ones.
+                // If it was, we ignore this org to prevent from adding it again.
+                const existingMemberOrgs = await orgService.findMemberOrganizations(id, org.id)
+                return existingMemberOrgs.length > 0 ? null : org
+              }),
+            )
+          ).filter((org) => org !== null)
+
+          if (orgsToAdd.length > 0) {
+            await orgService.addToMember(tenantId, segmentId, id, orgsToAdd)
+            updated = true
+          }
         }
 
         return { updated, organizations }
       })
 
       if (updated && fireSync) {
-        await this.searchSyncWorkerEmitter.triggerMemberSync(tenantId, id, onboarding)
+        await this.searchSyncWorkerEmitter.triggerMemberSync(tenantId, id, onboarding, segmentId)
       }
 
       for (const org of organizations) {
-        await this.searchSyncWorkerEmitter.triggerOrganizationSync(tenantId, org.id, onboarding)
+        await this.searchSyncWorkerEmitter.triggerOrganizationSync(
+          tenantId,
+          org.id,
+          onboarding,
+          segmentId,
+        )
       }
     } catch (err) {
       this.log.error(err, { memberId: id }, 'Error while updating a member!')
@@ -315,15 +399,26 @@ export default class MemberService extends LoggerBase {
 
     // Assign member to organization based on email domain
     for (const domain of emailDomains) {
-      const orgId = await orgService.findOrCreate(tenantId, segmentId, integrationId, {
-        website: domain,
-        identities: [
-          {
-            name: domain,
-            platform: 'email',
+      const orgId = await orgService.findOrCreate(
+        tenantId,
+        OrganizationAttributeSource.EMAIL,
+        integrationId,
+        {
+          attributes: {
+            name: {
+              integration: [domain],
+            },
           },
-        ],
-      })
+          identities: [
+            {
+              value: domain,
+              type: OrganizationIdentityType.PRIMARY_DOMAIN,
+              platform: 'email',
+              verified: true,
+            },
+          ],
+        },
+      )
       if (orgId) {
         organizations.push({
           id: orgId,
@@ -349,10 +444,10 @@ export default class MemberService extends LoggerBase {
     try {
       this.log.debug('Processing member enrich.')
 
-      if (
-        (!member.emails || member.emails.length === 0) &&
-        (!member.identities || member.identities.length === 0)
-      ) {
+      const emailIdentities = member.identities.filter(
+        (i) => i.verified && i.type === MemberIdentityType.EMAIL,
+      )
+      if (emailIdentities.length === 0 && (!member.identities || member.identities.length === 0)) {
         const errorMessage = `Member can't be enriched. It is missing both emails and identities fields.`
         this.log.warn(errorMessage)
         return
@@ -363,9 +458,7 @@ export default class MemberService extends LoggerBase {
         const txIntegrationRepo = new IntegrationRepository(txStore, this.log)
         const txService = new MemberService(
           txStore,
-          this.nodejsWorkerEmitter,
           this.searchSyncWorkerEmitter,
-          this.unleash,
           this.temporal,
           this.redisClient,
           this.log,
@@ -377,12 +470,21 @@ export default class MemberService extends LoggerBase {
         // first try finding the member using the identity
         const identity = singleOrDefault(
           member.identities,
-          (i) => i.platform === platform && i.sourceId !== undefined && i.sourceId !== null,
+          (i) =>
+            i.platform === platform &&
+            i.sourceId !== undefined &&
+            i.sourceId !== null &&
+            i.type === MemberIdentityType.USERNAME,
         )
-        let dbMember = await txRepo.findMember(tenantId, segmentId, platform, identity.username)
+        let dbMember = await txRepo.findMemberByUsername(
+          tenantId,
+          segmentId,
+          platform,
+          identity.value,
+        )
 
-        if (!dbMember && member.emails && member.emails.length > 0) {
-          const email = member.emails[0]
+        if (!dbMember && emailIdentities.length > 0) {
+          const email = emailIdentities[0].value
 
           // try finding the member using e-mail
           dbMember = await txRepo.findMemberByEmail(tenantId, email)
@@ -409,14 +511,13 @@ export default class MemberService extends LoggerBase {
             integrationId,
             {
               attributes: member.attributes,
-              emails: member.emails || [],
               joinedAt: member.joinedAt ? new Date(member.joinedAt) : undefined,
-              weakIdentities: member.weakIdentities || undefined,
               identities: member.identities,
               organizations: member.organizations,
               displayName: member.displayName || undefined,
             },
             dbMember,
+            platform,
             false,
           )
         } else {
@@ -454,9 +555,7 @@ export default class MemberService extends LoggerBase {
         const txIntegrationRepo = new IntegrationRepository(txStore, this.log)
         const txService = new MemberService(
           txStore,
-          this.nodejsWorkerEmitter,
           this.searchSyncWorkerEmitter,
-          this.unleash,
           this.temporal,
           this.redisClient,
           this.log,
@@ -466,8 +565,16 @@ export default class MemberService extends LoggerBase {
         const segmentId = dbIntegration.segmentId
 
         // first try finding the member using the identity
-        const identity = singleOrDefault(member.identities, (i) => i.platform === platform)
-        const dbMember = await txRepo.findMember(tenantId, segmentId, platform, identity.username)
+        const identity = singleOrDefault(
+          member.identities,
+          (i) => i.platform === platform && i.type === MemberIdentityType.USERNAME,
+        )
+        const dbMember = await txRepo.findMemberByUsername(
+          tenantId,
+          segmentId,
+          platform,
+          identity.value,
+        )
 
         if (dbMember) {
           this.log.trace({ memberId: dbMember.id }, 'Found existing member.')
@@ -480,15 +587,14 @@ export default class MemberService extends LoggerBase {
             integrationId,
             {
               attributes: member.attributes,
-              emails: member.emails || [],
               joinedAt: member.joinedAt ? new Date(member.joinedAt) : undefined,
-              weakIdentities: member.weakIdentities || undefined,
               identities: member.identities,
               organizations: member.organizations,
               displayName: member.displayName || undefined,
               reach: member.reach || undefined,
             },
             dbMember,
+            platform,
             false,
           )
         } else {
@@ -501,41 +607,29 @@ export default class MemberService extends LoggerBase {
     }
   }
 
-  private async checkForStrongWeakIdentities(
-    repo: MemberRepository,
-    tenantId: string,
-    data: IMemberCreateData | IMemberUpdateData,
-    memberId?: string,
-  ): Promise<void> {
-    if (data.weakIdentities && data.weakIdentities.length > 0) {
-      const results = await repo.findIdentities(tenantId, data.weakIdentities, memberId)
+  private validateEmails(identities: IMemberIdentity[]): IMemberIdentity[] {
+    const toReturn: IMemberIdentity[] = []
 
-      const strongIdentities = []
-
-      for (const weakIdentity of data.weakIdentities) {
-        if (!results.has(`${weakIdentity.platform}:${weakIdentity.username}`)) {
-          strongIdentities.push(weakIdentity)
+    for (const identity of identities) {
+      if (identity.type === MemberIdentityType.EMAIL) {
+        // check if email is valid and that the same email doesn't already exists in the array for the same platform
+        if (
+          isEmail(identity.value) &&
+          toReturn.find(
+            (i) =>
+              i.type === MemberIdentityType.EMAIL &&
+              i.value === identity.value &&
+              i.platform === identity.platform,
+          ) === undefined
+        ) {
+          toReturn.push({ ...identity, value: identity.value.toLowerCase() })
         }
-      }
-
-      if (strongIdentities.length > 0) {
-        data.weakIdentities = data.weakIdentities.filter(
-          (i) =>
-            strongIdentities.find((s) => s.platform === i.platform && s.username === i.username) ===
-            undefined,
-        )
-
-        for (const identity of strongIdentities) {
-          if (
-            data.identities.find(
-              (i) => i.platform === identity.platform && i.username === identity.username,
-            ) === undefined
-          ) {
-            data.identities.push(identity)
-          }
-        }
+      } else {
+        toReturn.push(identity)
       }
     }
+
+    return toReturn
   }
 
   private static mergeData(
@@ -547,65 +641,35 @@ export default class MemberService extends LoggerBase {
     if (member.joinedAt) {
       const newDate = member.joinedAt
       const oldDate = new Date(dbMember.joinedAt)
-      // If either the new or the old date are earlier than 1970
-      // it means they come from an activity without timestamp
-      // and we want to keep the other one
-      if (moment(oldDate).subtract(5, 'days').unix() < 0) {
-        joinedAt = newDate.toISOString()
-      }
-      if (moment(newDate).unix() < 0) {
-        joinedAt = undefined
-      }
 
-      if (oldDate <= newDate) {
-        // we already have the oldest date in the db, so we don't need to update it
-        joinedAt = undefined
-      } else {
-        // we have a new date and it's older, so we need to update it
-        joinedAt = newDate.toISOString()
-      }
+      joinedAt = getEarliestValidDate(oldDate, newDate).toISOString()
     }
 
-    let emails: string[] | undefined
-    if (member.emails && member.emails.length > 0) {
-      if (!firstArrayContainsSecondArray(dbMember.emails, member.emails)) {
-        emails = [...new Set([...member.emails, ...dbMember.emails])]
-      }
-    }
-
-    let weakIdentities: IMemberIdentity[] | undefined
-    if (member.weakIdentities && member.weakIdentities.length > 0) {
-      const newWeakIdentities: IMemberIdentity[] = []
-      for (const identity of member.weakIdentities) {
-        if (
-          !dbMember.weakIdentities.find(
-            (t) => t.platform === identity.platform && t.username === identity.username,
-          )
-        ) {
-          newWeakIdentities.push(identity)
-        }
-      }
-
-      if (newWeakIdentities.length > 0) {
-        weakIdentities = newWeakIdentities
-      }
-    }
-
-    let identities: IMemberIdentity[] | undefined
+    let identitiesToCreate: IMemberIdentity[] | undefined
+    let identitiesToUpdate: IMemberIdentity[] | undefined
     if (member.identities && member.identities.length > 0) {
       const newIdentities: IMemberIdentity[] = []
+      const toUpdate: IMemberIdentity[] = []
       for (const identity of member.identities) {
-        if (
-          !dbIdentities.find(
-            (t) => t.platform === identity.platform && t.username === identity.username,
-          )
-        ) {
+        const dbIdentity = dbIdentities.find(
+          (t) =>
+            t.platform === identity.platform &&
+            t.value === identity.value &&
+            t.type === identity.type,
+        )
+        if (!dbIdentity) {
           newIdentities.push(identity)
+        } else if (dbIdentity.verified !== identity.verified) {
+          toUpdate.push(identity)
         }
       }
 
       if (newIdentities.length > 0) {
-        identities = newIdentities
+        identitiesToCreate = newIdentities
+      }
+
+      if (toUpdate.length > 0) {
+        identitiesToUpdate = toUpdate
       }
     }
 
@@ -626,11 +690,10 @@ export default class MemberService extends LoggerBase {
     }
 
     return {
-      emails,
       joinedAt,
       attributes,
-      weakIdentities,
-      identities,
+      identitiesToCreate,
+      identitiesToUpdate,
       // we don't want to update the display name if it's already set
       // returned value should be undefined here otherwise it will cause an update!
       displayName: dbMember.displayName ? undefined : member.displayName,

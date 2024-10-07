@@ -1,6 +1,6 @@
 <template>
   <div class="pt-3">
-    <cr-filter
+    <lf-filter
       v-model="filters"
       :config="activityFilters"
       :search-config="activitySearchFilter"
@@ -9,10 +9,17 @@
     />
     <div
       v-if="loading && !activities.length"
-      class="h-16 !relative !min-h-5 flex justify-center items-center"
+      class="flex flex-col items-center mt-10"
     >
-      <div class="animate-spin w-fit">
-        <div class="custom-spinner" />
+      <div
+        class="h-16 !relative !min-h-5 flex justify-center items-center"
+      >
+        <div class="animate-spin w-fit">
+          <div class="custom-spinner" />
+        </div>
+      </div>
+      <div class="text-gray-500 italic text-xs">
+        This might take up to 10 seconds for a large project group
       </div>
     </div>
     <div v-else>
@@ -76,7 +83,7 @@ import {
 import AppActivityItem from '@/modules/activity/components/activity-item.vue';
 import AppConversationDrawer from '@/modules/conversation/components/conversation-drawer.vue';
 import AppPaginationSorter from '@/shared/pagination/pagination-sorter.vue';
-import CrFilter from '@/shared/modules/filters/components/Filter.vue';
+import LfFilter from '@/shared/modules/filters/components/Filter.vue';
 import { useActivityStore } from '@/modules/activity/store/pinia';
 import { storeToRefs } from 'pinia';
 import { activityFilters, activitySearchFilter } from '@/modules/activity/config/filters/main';
@@ -102,6 +109,15 @@ const {
 const { fetchActivities } = activityStore;
 
 const loading = ref(false);
+
+filters.value = {
+  search: '',
+  relation: 'and',
+  order: {
+    prop: 'timestamp',
+    order: 'descending',
+  },
+};
 
 const emptyState = computed(() => ({
   title: 'No activities found',

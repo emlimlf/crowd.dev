@@ -6,10 +6,15 @@
       </h4>
     </div>
 
-    <el-tabs v-model="computedActiveTab">
+    <el-tabs :model-value="activeTab" class="mb-6" @update:model-value="changeView">
       <el-tab-pane label="Project Groups" name="project-groups">
         <app-lf-project-groups-page
           v-if="activeTab === 'project-groups'"
+        />
+      </el-tab-pane>
+      <el-tab-pane v-if="isAdminUser" label="Organizations" name="organizations">
+        <app-organization-common-page
+          v-if="activeTab === 'organizations'"
         />
       </el-tab-pane>
       <el-tab-pane v-if="isAdminUser" label="Automations" name="automations">
@@ -21,6 +26,14 @@
         <app-api-keys-page
           v-if="activeTab === 'api-keys'"
         />
+      </el-tab-pane>
+      <el-tab-pane v-if="isAdminUser" label="Audit logs" name="audit-logs">
+        <app-lf-audit-logs-page
+          v-if="activeTab === 'audit-logs'"
+        />
+      </el-tab-pane>
+      <el-tab-pane v-if="isDevMode" label="Dev" name="dev">
+        <lf-devmode v-if="isDevMode && activeTab === 'dev'" />
       </el-tab-pane>
     </el-tabs>
   </app-page-wrapper>
@@ -34,51 +47,47 @@ import { useRoute, useRouter } from 'vue-router';
 import AppLfProjectGroupsPage from '@/modules/lf/segments/pages/lf-project-groups-page.vue';
 import AppApiKeysPage from '@/modules/settings/pages/api-keys-page.vue';
 import AppAutomationList from '@/modules/automation/components/automation-list.vue';
-import { PermissionChecker } from '@/modules/user/permission-checker';
-import Roles from '@/security/roles';
-import { mapGetters } from '@/shared/vuex/vuex.helpers';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import { storeToRefs } from 'pinia';
+import AppLfAuditLogsPage from '@/modules/lf/segments/pages/lf-audit-logs-page.vue';
+import LfDevmode from '@/modules/lf/segments/components/dev/devmode.vue';
+import { LfRole } from '@/shared/modules/permissions/types/Roles';
+import AppOrganizationCommonPage from '@/modules/organization/pages/organization-common-page.vue';
+// import AppOrganizationCommonPage from '@/modules/organization/pages/organization-common-page.vue';
 
 const route = useRoute();
 const router = useRouter();
 
 const activeTab = ref<string>();
 
-const { currentTenant, currentUser } = mapGetters('auth');
+const authStore = useAuthStore();
+const { roles } = storeToRefs(authStore);
 
-const computedActiveTab = computed({
-  get() {
-    return activeTab.value;
-  },
-  set(v) {
-    router.push({
-      name: '',
-      query: { activeTab: v },
-    });
-  },
-});
+const changeView = (view: string) => {
+  router.push({
+    hash: `#${view}`,
+    query: {},
+  });
+};
 
-const isAdminUser = computed(() => {
-  const permissionChecker = new PermissionChecker(
-    currentTenant.value,
-    currentUser.value,
-  );
+const isAdminUser = computed(() => roles.value.includes(LfRole.admin));
 
-  return permissionChecker.currentUserRolesIds.includes(Roles.values.admin);
-});
+const isDevMode = !!localStorage.getItem('devmode');
 
 onMounted(() => {
-  const initialActiveTab = route.query.activeTab as string;
+  const initialActiveTab = route.hash.substring(1) as string;
 
-  if ((initialActiveTab === 'automations' || initialActiveTab === 'api-keys') && !isAdminUser.value) {
+  if ((initialActiveTab === 'automations' || initialActiveTab === 'api-keys' || initialActiveTab === 'audit-logs') && !isAdminUser.value) {
     activeTab.value = 'project-groups';
   } else {
-    activeTab.value = route.query.activeTab as string || 'project-groups';
+    activeTab.value = route.hash.substring(1) as string || 'project-groups';
   }
 });
 
-watch(() => route.query.activeTab, (newActiveTab) => {
-  if (newActiveTab) {
-    activeTab.value = newActiveTab as string;
+watch(() => route.hash, (hash: string) => {
+  const view = hash.substring(1);
+  if (view.length > 0 && view !== activeTab.value) {
+    activeTab.value = view;
   }
-});
+}, { immediate: true });
 </script>

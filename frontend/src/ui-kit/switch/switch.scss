@@ -1,0 +1,79 @@
+.c-switch {
+  font-size: var(--lf-switch-font-size);
+  line-height: var(--lf-switch-line-height);
+  font-weight: var(--lf-switch-text-font-weight);
+  color: var(--lf-switch-text-color);
+  @apply flex flex-wrap relative;
+
+  input {
+    height: var(--lf-switch-height);
+    width: var(--lf-switch-width);
+    border: rem(2) solid var(--lf-switch-background);
+    background: var(--lf-switch-background);
+    border-radius: var(--lf-switch-height);
+
+    @apply transition-all appearance-none relative p-0 my-0 ml-0 inline-block mr-0 cursor-pointer;
+
+    // Text
+    & + span{
+      margin-top: calc((var(--lf-switch-height) - var(--lf-switch-line-height)) / 2);
+      @apply cursor-pointer ml-3;
+    }
+
+    &:before{
+      content: '';
+      background: var(--lf-switch-handle);
+      margin-left: 0;
+      @apply relative h-full w-1/2 rounded-full block transition-all;
+    }
+
+    // Checked
+    &:checked{
+      --lf-switch-handle: var(--lf-switch-checked-handle);
+      --lf-switch-background: var(--lf-switch-checked-background);
+
+      &:before{
+        margin-left: 50%;
+      }
+    }
+
+    // Disabled
+    &:disabled {
+      --lf-switch-handle: var(--lf-switch-disabled-unchecked-handle);
+      --lf-switch-background: var(--lf-switch-disabled-unchecked-background);
+      @apply cursor-not-allowed;
+
+      &:checked {
+        --lf-switch-handle: var(--lf-switch-disabled-checked-handle);
+        --lf-switch-background: var(--lf-switch-disabled-checked-background);
+      }
+
+      & + span{
+        @apply cursor-not-allowed;
+      }
+    }
+  }
+
+  // Checkbox sizes
+  &--small {
+    --lf-switch-height: var(--lf-switch-small-height);
+    --lf-switch-width: var(--lf-switch-small-width);
+    --lf-switch-font-size: var(--lf-switch-small-font-size);
+    --lf-switch-line-height: var(--lf-switch-small-line-height);
+  }
+
+  &--medium {
+    --lf-switch-height: var(--lf-switch-medium-height);
+    --lf-switch-width: var(--lf-switch-medium-width);
+    --lf-switch-font-size: var(--lf-switch-medium-font-size);
+    --lf-switch-line-height: var(--lf-switch-medium-line-height);
+  }
+
+  p{
+    font-size: var(--lf-switch-description-font-size);
+    line-height: var(--lf-switch-description-line-height);
+    font-weight: var(--lf-switch-description-font-weight);
+    color: var(--lf-switch-description-color);
+    margin-top: var(--lf-switch-description-spacing);
+  }
+}

@@ -119,12 +119,15 @@ export enum GithubManualStreamType {
   DISCUSSIONS = 'discussions',
 }
 
+export const INDIRECT_FORK = 'indirect-fork'
+
 export interface GithubApiData {
   type: GithubActivityType
   subType?: string
   data: any[] | any
   relatedData?: any | any[]
-  member: GithubPrepareMemberOutput
+  member?: GithubPrepareMemberOutput
+  orgMember?: GithubPrepareOrgMemberOutput
   objectMember?: GithubPrepareMemberOutput
   sourceParentId?: string
   repo: Repo
@@ -135,7 +138,8 @@ export interface GithubWebhookData {
   subType?: string
   data: any[] | any
   relatedData?: any | any[]
-  member: GithubPrepareMemberOutput
+  member?: GithubPrepareMemberOutput
+  orgMember?: GithubPrepareOrgMemberOutput
   objectMember?: GithubPrepareMemberOutput
   sourceParentId?: string
   date?: string
@@ -171,9 +175,19 @@ export interface GithubIntegrationSettings {
   unavailableRepos: Repos
 }
 
-export interface GithubManualIntegrationSettings extends GithubIntegrationSettings {
+export interface GitHubManualIntegrationSettingsDefault extends GithubIntegrationSettings {
+  manualSettingsType: 'default'
   streamType: GithubManualStreamType
 }
+
+export interface GitHubManualIntegrationSettingsDetailedMap extends GithubIntegrationSettings {
+  manualSettingsType: 'detailed_map'
+  map: object
+}
+
+export type GithubManualIntegrationSettings =
+  | GitHubManualIntegrationSettingsDefault
+  | GitHubManualIntegrationSettingsDetailedMap
 
 export enum GithubPullRequestEvents {
   REQUEST_REVIEW = 'ReviewRequestedEvent',
@@ -215,4 +229,16 @@ export interface GithubPrepareMemberOutput {
   email: string
   orgs: any
   memberFromApi: any
+}
+
+export interface GithubBotMember {
+  login: string
+  avatarUrl: string
+  avatar_url?: string
+  id: string
+  url: string
+}
+
+export interface GithubPrepareOrgMemberOutput {
+  orgFromApi: any
 }

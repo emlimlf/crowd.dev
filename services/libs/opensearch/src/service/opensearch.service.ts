@@ -1,50 +1,26 @@
+import { IS_DEV_ENV } from '@crowd/common'
+import { Logger, LoggerBase } from '@crowd/logging'
+import telemetry from '@crowd/telemetry'
+import { Client } from '@opensearch-project/opensearch'
 import {
   IndexVersions,
   OPENSEARCH_INDEX_MAPPINGS,
   OPENSEARCH_INDEX_SETTINGS,
   OpenSearchIndex,
 } from '../types'
-import { IS_DEV_ENV } from '@crowd/common'
-import { Logger, LoggerBase } from '@crowd/logging'
-import { Client } from '@opensearch-project/opensearch'
 import { IIndexRequest, ISearchHit } from './opensearch.data'
-import { AwsSigv4Signer } from '@opensearch-project/opensearch/aws'
-import { IOpenSearchConfig } from '@crowd/types'
 
 export class OpenSearchService extends LoggerBase {
-  public readonly client: Client
   private readonly indexVersionMap: Map<OpenSearchIndex, string> = new Map()
-  private readonly config: IOpenSearchConfig
 
-  constructor(parentLog: Logger, config: IOpenSearchConfig) {
+  constructor(parentLog: Logger, public readonly client: Client) {
     super(parentLog)
-    this.config = config
 
     const indexNames = Object.values(OpenSearchIndex)
     indexNames.forEach((name) => {
       const version = IndexVersions.get(name)
       this.indexVersionMap.set(name, `${name}_v${version}`)
     })
-
-    if (this.config.region) {
-      this.client = new Client({
-        node: this.config.node,
-        ...AwsSigv4Signer({
-          region: this.config.region,
-          service: 'es',
-          getCredentials: async () => {
-            return {
-              accessKeyId: this.config.accessKeyId,
-              secretAccessKey: this.config.secretAccessKey,
-            }
-          },
-        }),
-      })
-    } else {
-      this.client = new Client({
-        node: this.config.node,
-      })
-    }
   }
 
   private async doesIndexExist(indexName: string): Promise<boolean> {
@@ -270,18 +246,22 @@ export class OpenSearchService extends LoggerBase {
       },
     })
     await this.ensureIndexAndAliasExists(OpenSearchIndex.MEMBERS)
-    await this.ensureIndexAndAliasExists(OpenSearchIndex.ACTIVITIES)
     await this.ensureIndexAndAliasExists(OpenSearchIndex.ORGANIZATIONS)
   }
 
   public async removeFromIndex(id: string, index: OpenSearchIndex): Promise<void> {
     try {
       const indexName = this.indexVersionMap.get(index)
-      await this.client.delete({
-        id,
-        index: indexName,
-        refresh: true,
-      })
+      await telemetry.measure(
+        'opensearch.delete',
+        () =>
+          this.client.delete({
+            id,
+            index: indexName,
+            refresh: true,
+          }),
+        { index },
+      )
     } catch (err) {
       if (err.meta.statusCode === 404) {
         this.log.debug(err, { id, index }, 'Document not found in index!')
@@ -292,15 +272,41 @@ export class OpenSearchService extends LoggerBase {
     }
   }
 
+  public async bulkRemoveFromIndex(ids: string[], index: OpenSearchIndex): Promise<void> {
+    try {
+      const indexName = this.indexVersionMap.get(index)
+      const body = ids.flatMap((id) => [{ delete: { _id: id } }])
+
+      await telemetry.measure(
+        'opensearch.bulk',
+        () =>
+          this.client.bulk({
+            index: indexName,
+            body,
+            refresh: true,
+          }),
+        { index },
+      )
+    } catch (err) {
+      this.log.error(err, { index }, 'Failed to bulk remove documents from index!')
+      throw new Error(`Failed to bulk remove documents from index ${index}!`)
+    }
+  }
+
   public async index<T>(id: string, index: OpenSearchIndex, body: T): Promise<void> {
     const indexName = this.indexVersionMap.get(index)
     try {
-      await this.client.index({
-        id,
-        index: indexName,
-        body,
-        refresh: true,
-      })
+      await telemetry.measure(
+        'opensearch.index',
+        () =>
+          this.client.index({
+            id,
+            index: indexName,
+            body,
+            refresh: true,
+          }),
+        { index },
+      )
     } catch (err) {
       this.log.error(err, { id, index }, 'Failed to index document!')
       throw new Error(`Failed to index document with id: ${id} in index ${index}!`)
@@ -320,10 +326,15 @@ export class OpenSearchService extends LoggerBase {
         })
       }
 
-      const result = await this.client.bulk({
-        body,
-        refresh: true,
-      })
+      const result = await telemetry.measure(
+        'opensearch.bulk',
+        () =>
+          this.client.bulk({
+            body,
+            refresh: true,
+          }),
+        { index },
+      )
 
       if (result.body.errors === true) {
         const errorItems = result.body.items
@@ -370,7 +381,9 @@ export class OpenSearchService extends LoggerBase {
         size,
       }
 
-      const data = await this.client.search(payload)
+      const data = await telemetry.measure('opensearch.search', () => this.client.search(payload), {
+        index,
+      })
 
       if (query) {
         return data.body.hits.hits

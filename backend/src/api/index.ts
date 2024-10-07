@@ -1,8 +1,11 @@
 import { SERVICE } from '@crowd/common'
+import { getDbConnection } from '@crowd/data-access-layer/src/database'
 import { getUnleashClient } from '@crowd/feature-flags'
 import { getServiceLogger } from '@crowd/logging'
 import { getOpensearchClient } from '@crowd/opensearch'
 import { getRedisClient, getRedisPubSubPair, RedisPubSubReceiver } from '@crowd/redis'
+import { telemetryExpressMiddleware } from '@crowd/telemetry'
+import { getTemporalClient, Client as TemporalClient } from '@crowd/temporal'
 import { getServiceTracer } from '@crowd/tracing'
 import { ApiWebsocketMessage, Edition } from '@crowd/types'
 import bodyParser from 'body-parser'
@@ -11,12 +14,14 @@ import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
 import * as http from 'http'
-import { getTemporalClient, Client as TemporalClient } from '@crowd/temporal'
-import { QueryTypes, Sequelize } from 'sequelize'
-import { telemetryExpressMiddleware } from '@crowd/telemetry'
+import os from 'os'
+import { QueryTypes } from 'sequelize'
+import { productDatabaseMiddleware } from '@/middlewares/productDbMiddleware'
+import SequelizeRepository from '@/database/repositories/sequelizeRepository'
 import {
   API_CONFIG,
   OPENSEARCH_CONFIG,
+  PRODUCT_DB_CONFIG,
   REDIS_CONFIG,
   TEMPORAL_CONFIG,
   UNLEASH_CONFIG,
@@ -35,7 +40,6 @@ import setupSwaggerUI from './apiDocumentation'
 import { createRateLimiter } from './apiRateLimiter'
 import authSocial from './auth/authSocial'
 import WebSockets from './websockets'
-import { databaseInit } from '@/database/databaseConnection'
 
 const serviceLogger = getServiceLogger()
 getServiceTracer()
@@ -47,7 +51,7 @@ const server = http.createServer(app)
 setImmediate(async () => {
   const redis = await getRedisClient(REDIS_CONFIG, true)
 
-  const opensearch = getOpensearchClient(OPENSEARCH_CONFIG)
+  const opensearch = await getOpensearchClient(OPENSEARCH_CONFIG)
 
   const redisPubSubPair = await getRedisPubSubPair(REDIS_CONFIG)
   const userNamespace = await WebSockets.initialize(server)
@@ -89,6 +93,27 @@ setImmediate(async () => {
       level: 'trace',
     }),
   )
+
+  app.use((req, res, next) => {
+    req.profileSql = req.headers['x-profile-sql'] === 'true'
+    next()
+  })
+
+  app.use((req, res, next) => {
+    res.setHeader('X-Hostname', os.hostname())
+    next()
+  })
+
+  app.use((req, res, next) => {
+    // this middleware fixes the issue with logging and datadog
+    // explained in detail here: https://github.com/CrowdDotDev/crowd.dev/pull/2144
+    // in short: the hostname field in logs breaks how datadog assigns k8s cluster info
+    if (req.log.fields.hostname) {
+      delete req.log.fields.hostname
+    }
+
+    next()
+  })
 
   // Initializes and adds the database middleware.
   app.use(databaseMiddleware)
@@ -167,11 +192,27 @@ setImmediate(async () => {
 
   app.use(bodyParser.urlencoded({ limit: '5mb', extended: true }))
 
+  app.use((req, res, next) => {
+    req.userData = {
+      ip: req.ip,
+      userAgent: req.headers ? req.headers['user-agent'] : null,
+    }
+
+    next()
+  })
+
   // Configure the Entity routes
   const routes = express.Router()
 
   // Enable Passport for Social Sign-in
   authSocial(app, routes)
+
+  // Enable product db only if it's configured
+  if (PRODUCT_DB_CONFIG) {
+    const productDbClient = await getDbConnection(PRODUCT_DB_CONFIG)
+    app.use(productDatabaseMiddleware(productDbClient))
+    require('./product').default(routes)
+  }
 
   require('./auditLog').default(routes)
   require('./auth').default(routes)
@@ -180,12 +221,8 @@ setImmediate(async () => {
   require('./user').default(routes)
   require('./settings').default(routes)
   require('./member').default(routes)
-  require('./widget').default(routes)
   require('./activity').default(routes)
   require('./tag').default(routes)
-  require('./widget').default(routes)
-  require('./cubejs').default(routes)
-  require('./report').default(routes)
   require('./integration').default(routes)
   require('./microservice').default(routes)
   require('./conversation').default(routes)
@@ -200,7 +237,8 @@ setImmediate(async () => {
   require('./systemStatus').default(routes)
   require('./eventTracking').default(routes)
   require('./customViews').default(routes)
-  require('./premium/enrichment').default(routes)
+  require('./dashboard').default(routes)
+  require('./mergeAction').default(routes)
   // Loads the Tenant if the :tenantId param is passed
   routes.param('tenantId', tenantMiddleware)
   routes.param('tenantId', segmentMiddleware)
@@ -210,10 +248,10 @@ setImmediate(async () => {
   const webhookRoutes = express.Router()
   require('./webhooks').default(webhookRoutes)
 
-  const seq = (await databaseInit()).sequelize as Sequelize
-
   app.use('/health', async (req: any, res) => {
     try {
+      const seq = SequelizeRepository.getSequelize(req)
+
       const [osPingRes, redisPingRes, dbPingRes, temporalPingRes] = await Promise.all([
         // ping opensearch
         opensearch.ping().then((res) => res.body),
@@ -238,7 +276,7 @@ setImmediate(async () => {
         })
       }
     } catch (err) {
-      res.status(500).json({ error: err })
+      res.status(500).json({ error: err.message, stack: err.stack })
     }
   })
 

@@ -4,6 +4,7 @@
     :settings="settings"
     :has-settings="hasSettings"
     :has-integration="isLinkedinEnabled"
+    :settings-component="LinkedinSettings"
   />
   <app-linkedin-settings-drawer
     v-if="integration.status"
@@ -25,9 +26,10 @@ import Nango from '@nangohq/frontend';
 import { useStore } from 'vuex';
 import { useThrottleFn } from '@vueuse/core';
 import config from '@/config';
-import AuthCurrentTenant from '@/modules/auth/auth-current-tenant';
+import { AuthService } from '@/modules/auth/services/auth.service';
 import { FeatureFlag } from '@/utils/featureFlag';
 import AppLinkedinSettingsDrawer from '@/integrations/linkedin/components/linkedin-settings-drawer.vue';
+import LinkedinSettings from './linkedin-settings.vue';
 
 const store = useStore();
 const router = useRouter();
@@ -38,7 +40,7 @@ const props = defineProps({
   },
 });
 
-const tenantId = computed(() => AuthCurrentTenant.get());
+const tenantId = computed(() => AuthService.getTenantId());
 
 const callOnboard = useThrottleFn(async () => {
   await store.dispatch('integration/doLinkedinConnect');

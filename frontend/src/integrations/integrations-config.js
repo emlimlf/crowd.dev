@@ -5,7 +5,7 @@ import twitter from './twitter';
 import devto from './devto';
 import hackernews from './hackernews';
 import discourse from './discourse';
-import hubspot from './hubspot';
+// import hubspot from './hubspot';
 import stackoverflow from './stackoverflow';
 import reddit from './reddit';
 import linkedin from './linkedin';
@@ -19,8 +19,10 @@ import lfx from './custom/lfx';
 import groupsio from './groupsio';
 import confluence from './confluence';
 import gerrit from './gerrit';
+import jira from './jira';
 import cvent from './custom/cvent';
 import tnc from './custom/tnc';
+import gitlab from './gitlab';
 
 class IntegrationsConfig {
   get integrations() {
@@ -30,7 +32,7 @@ class IntegrationsConfig {
       hackernews,
       linkedin,
       twitter,
-      hubspot,
+      // hubspot,
       slack,
       devto,
       reddit,
@@ -45,6 +47,8 @@ class IntegrationsConfig {
       facebook,
       confluence,
       gerrit,
+      jira,
+      gitlab,
     };
   }
 
@@ -99,11 +103,62 @@ class IntegrationsConfig {
       .filter((i) => !i.hideAsIntegration);
   }
 
+  getPlatformsLabel(platforms) {
+    return platforms
+      .filter((platform) => !['integration_or_enrichment', 'email', 'integration', 'unknown', 'delete'].includes(platform))
+      .map((platform) => {
+        if (['enrichment', 'peopledatalabs'].includes(platform)) {
+          return '<span class="ri-sparkling-line mr-0.5"></span> Enrichment';
+        }
+        if (platform === 'custom') {
+          return 'Manually added';
+        }
+        return this.getConfig(platform)?.name || platform;
+      }).join(', ');
+  }
+
   get customIntegrations() {
     return {
-      lfx,
       cvent,
+      lfx,
+      lfid: lfx,
       tnc,
+      training_cert: tnc,
+    };
+  }
+
+  get memberIdentities() {
+    return {
+      github,
+      discord,
+      hackernews,
+      linkedin,
+      twitter,
+      // hubspot,
+      slack,
+      devto,
+      reddit,
+      stackoverflow,
+      discourse,
+      git,
+      groupsio,
+      // make,
+      confluence,
+      gerrit,
+      jira,
+      cvent,
+      lfx,
+      tnc,
+      gitlab,
+    };
+  }
+
+  get organizationIdentities() {
+    return {
+      github,
+      linkedin,
+      twitter,
+      crunchbase,
     };
   }
 }

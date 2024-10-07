@@ -1,191 +1,153 @@
 <template>
-  <app-cube-render
-    :query="sentimentQuery(period, platform, segments.childSegments)"
-  >
-    <template #loading>
-      <div class="pb-3">
-        <app-loading height="8px" />
-      </div>
-      <div class="flex justify-between pb-2">
-        <p class="text-sm font-medium">
-          Positive
-        </p>
-        <app-loading
-          class="py-1"
-          height="12px"
-          width="40px"
-        />
-      </div>
-      <div class="flex justify-between pb-2">
-        <p class="text-sm font-medium">
-          Negative
-        </p>
-        <app-loading
-          class="py-1"
-          height="12px"
-          width="40px"
-        />
-      </div>
-    </template>
-    <template #default="{ resultSet }">
-      <div>
-        <div v-if="!loadingData(resultSet)">
-          <div class="flex w-full pb-5">
-            <div
-              v-for="data of compileData(resultSet)"
-              :key="data.type"
-              class="h-2 border-x-2 border-white rounded-lg transition cursor-pointer"
-              :style="{
-                width: `${calculatePercentage(data.count)}%`,
-              }"
-              :class="[
-                hoverSentimentClass(data.type),
-                typeClasses[data.type],
-              ]"
-              @mouseover="hoveredSentiment = data.type"
-              @mouseleave="hoveredSentiment = ''"
-              @click="handleSentimentClick(data.type)"
-            />
-          </div>
-          <div>
-            <div
-              v-for="data of compileData(resultSet)"
-              :key="data.type"
-              class="flex items-center pb-3 cursor-pointer"
-              :class="hoverSentimentClass(data.type)"
-              @mouseover="hoveredSentiment = data.type"
-              @mouseleave="hoveredSentiment = ''"
-              @click="handleSentimentClick(data.type)"
-            >
-              <i
-                class="text-lg mr-2 flex items-center h-5"
-                :class="typeEmoji[data.type]"
-              />
-              <p
-                class="text-sm font-medium capitalize pr-2"
-              >
-                {{ data.type }}
-              </p>
-              <p class="text-sm text-gray-400 text-right">
-                {{ data.count }}・{{
-                  calculatePercentage(data.count)
-                }}%
-              </p>
-            </div>
-          </div>
-        </div>
+  <h6 v-if="chartData?.activity?.bySentimentMood" class="text-sm leading-5 font-semibold mb-4">
+    Overall sentiment
+  </h6>
+  <div v-if="!chartData">
+    <div class="pb-3">
+      <app-loading height="8px" />
+    </div>
+    <div class="flex justify-between pb-2">
+      <p class="text-sm font-medium">
+        Positive
+      </p>
+      <app-loading
+        class="py-1"
+        height="12px"
+        width="40px"
+      />
+    </div>
+    <div class="flex justify-between pb-2">
+      <p class="text-sm font-medium">
+        Negative
+      </p>
+      <app-loading
+        class="py-1"
+        height="12px"
+        width="40px"
+      />
+    </div>
+  </div>
+  <div v-else>
+    <div>
+      <div class="flex w-full pb-5">
         <div
-          v-else-if="noData"
-          class="text-xs italic text-gray-400"
+          v-for="(count, type) in bySentiment"
+          :key="type"
+          class="h-2 border-x-2 border-white rounded-lg transition cursor-pointer"
+          :style="{
+            width: `${calculatePercentage(count)}%`,
+          }"
+          :class="[
+            hoverSentimentClass(type),
+            valuesByType[type].class,
+          ]"
+          @mouseover="hoveredSentiment = type"
+          @mouseleave="hoveredSentiment = ''"
+          @click="handleSentimentClick(type)"
+        />
+      </div>
+      <div>
+        <div
+          v-for="(count, type) in bySentiment"
+          :key="type"
+          class="flex items-center pb-3 cursor-pointer"
+          :class="hoverSentimentClass(type)"
+          @mouseover="hoveredSentiment = type"
+          @mouseleave="hoveredSentiment = ''"
+          @click="handleSentimentClick(type)"
         >
-          No data
+          <i
+            class="text-lg mr-2 flex items-center h-5"
+            :class="valuesByType[type].emoji"
+          />
+          <p
+            class="text-sm font-medium capitalize pr-2"
+          >
+            {{ type }}
+          </p>
+          <p class="text-sm text-gray-400 text-right">
+            {{ count }}・{{
+              calculatePercentage(count)
+            }}%
+          </p>
         </div>
       </div>
-    </template>
-  </app-cube-render>
+    </div>
+  </div>
 </template>
 
-<script>
-import { mapGetters } from 'vuex';
-import { sentimentQuery } from '@/modules/dashboard/dashboard.cube';
-import AppCubeRender from '@/shared/cube/cube-render.vue';
+<script setup lang="ts">
+import { computed, ref } from 'vue';
 import AppLoading from '@/shared/loading/loading-placeholder.vue';
+import { useRouter } from 'vue-router';
 import { filterQueryService } from '@/shared/modules/filters/services/filter-query.service';
+import { mapGetters } from '@/shared/vuex/vuex.helpers';
 
+const router = useRouter();
+
+const { chartData } = mapGetters('dashboard');
+
+const bySentiment = computed(() => {
+  const sentimentMap: Record<string, number> = {
+    positive: 0,
+    negative: 0,
+    neutral: 0,
+  };
+
+  if (chartData.value?.activity?.bySentimentMood) {
+    chartData.value.activity.bySentimentMood.forEach((item: { sentimentLabel: string, count: number }) => {
+      sentimentMap[item.sentimentLabel] = item.count;
+    });
+  }
+
+  return sentimentMap;
+});
+
+const total = computed(() => Object.values(bySentiment.value).reduce((a, b) => a + b, 0));
+
+const calculatePercentage = (count: number) => (total.value > 0 ? Math.round((count / total.value) * 100) : 0);
+
+const hoveredSentiment = ref('');
+
+const valuesByType: Record<string, { class: string, emoji: string }> = {
+  positive: {
+    class: 'bg-green-500',
+    emoji: 'ri-emotion-happy-line text-green-500',
+  },
+  negative: {
+    class: 'bg-red-500',
+    emoji: 'ri-emotion-unhappy-line text-red-500',
+  },
+  neutral: {
+    class: 'bg-gray-300',
+    emoji: 'ri-emotion-normal-line text-gray-400',
+  },
+};
+
+const hoverSentimentClass = (type: string) => (hoveredSentiment.value !== type && hoveredSentiment.value !== '' ? 'opacity-50' : '');
+
+const handleSentimentClick = (sentiment: string) => {
+  router.push({
+    name: 'activity',
+    query: filterQueryService().setQuery({
+      search: '',
+      relation: 'and',
+      order: {
+        prop: 'timestamp',
+        order: 'descending',
+      },
+      sentiment: {
+        value: [sentiment],
+        include: true,
+      },
+    }),
+    hash: '#activity',
+  });
+};
+</script>
+
+<script lang="ts">
 export default {
   name: 'AppDashboardActivitySentiment',
-  components: {
-    AppLoading,
-    AppCubeRender,
-  },
-  data() {
-    return {
-      hoveredSentiment: '',
-      sentimentQuery,
-      total: 0,
-      typeClasses: {
-        positive: 'bg-green-500',
-        negative: 'bg-red-500',
-        neutral: 'bg-gray-300',
-      },
-      typeEmoji: {
-        positive: 'ri-emotion-happy-line text-green-500',
-        negative: 'ri-emotion-unhappy-line text-red-500',
-        neutral: 'ri-emotion-normal-line text-gray-400',
-      },
-    };
-  },
-  computed: {
-    ...mapGetters('dashboard', ['period', 'platform', 'segments']),
-  },
-  methods: {
-    calculatePercentage(count) {
-      return Math.round((count / this.total) * 100);
-    },
-    hoverSentimentClass(type) {
-      return this.hoveredSentiment !== type
-        && this.hoveredSentiment !== ''
-        ? 'opacity-50'
-        : '';
-    },
-    loadingData(resultSet) {
-      return (
-        !resultSet || resultSet.loadResponse === undefined
-      );
-    },
-    noData(resultSet) {
-      return this.loadingData(resultSet) && this.total === 0;
-    },
-    compileData(resultSet) {
-      const seriesNames = resultSet.seriesNames();
-      const pivot = resultSet.chartPivot();
-      let series = [];
-      seriesNames.forEach((e) => {
-        const data = pivot.map((p) => [p.x, p[e.key]]);
-        series = [...series, ...data];
-      });
-      const seriesObject = series.reduce(
-        (a, [key, value]) => ({
-          ...a,
-          [key]: value,
-        }),
-        {},
-      );
-      const result = {
-        positive: seriesObject.positive || 0,
-        negative: seriesObject.negative || 0,
-        neutral: seriesObject.neutral || 0,
-      };
-      const finalResult = Object.entries(result)
-        .sort(([, a], [, b]) => b - a)
-        .map(([type, count]) => ({
-          type,
-          count,
-        }))
-        .filter(({ count }) => count > 0);
-
-      this.total = finalResult.reduce((a, b) => a + b.count, 0);
-
-      return finalResult;
-    },
-    handleSentimentClick(sentiment) {
-      this.$router.push({
-        name: 'activity',
-        query: filterQueryService().setQuery({
-          search: '',
-          relation: 'and',
-          order: {
-            prop: 'timestamp',
-            order: 'descending',
-          },
-          sentiment: {
-            value: [sentiment],
-            include: true,
-          },
-        }),
-        hash: '#activity',
-      });
-    },
-  },
 };
 </script>

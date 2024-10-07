@@ -1,11 +1,30 @@
 import moment from 'moment'
 
-import { generateUUIDv4 } from '@crowd/common'
-import { IMember, IOrganizationIdentity, OrganizationSource, PlatformType } from '@crowd/types'
+import { distinct, groupBy } from '@crowd/common'
+import {
+  IMember,
+  IOrganizationIdentity,
+  MemberIdentityType,
+  OrganizationIdentityType,
+  OrganizationSource,
+  PlatformType,
+} from '@crowd/types'
 
+import {
+  addMemberToMerge,
+  deleteMemberOrg,
+  findExistingMember,
+  findMemberOrgs,
+  insertOrgIdentity,
+  insertWorkExperience,
+  insertOrganization,
+  findOrganizationByVerifiedIdentity,
+  findOrganizationIdentities,
+  updateOrgIdentity,
+} from '@crowd/data-access-layer/src/old/apps/premium/members_enrichment_worker'
 import { svc } from '../main'
-import { normalize } from '../utils/normalize'
 import { EnrichingMember } from '../types/enrichment'
+import { normalize } from '../utils/normalize'
 
 /*
 normalizeEnrichedMember is a Temporal activity that, given a member and enriched
@@ -34,89 +53,60 @@ export async function normalizeEnrichedMember(input: EnrichingMember): Promise<I
 updateMergeSuggestions is a Temporal activity that update member merge suggestions
 in the database for a member and enriched data received.
 */
-export async function updateMergeSuggestions(input: EnrichingMember): Promise<IMember> {
-  if (input.member.username) {
-    try {
-      await svc.postgres.writer.connection().tx(async (tx) => {
-        const filteredUsername = Object.keys(input.member.username).reduce((obj, key) => {
-          if (!input.member.username[key]) {
-            obj[key] = input.member.username[key]
-          }
-          return obj
-        }, {})
+export async function updateMergeSuggestions(input: EnrichingMember): Promise<void> {
+  const usernameIdentities = input.member.identities.filter(
+    (i) => i.type === MemberIdentityType.USERNAME,
+  )
 
-        for (const [platform, usernames] of Object.entries(filteredUsername)) {
-          const usernameArray = Array.isArray(usernames) ? usernames : [usernames]
+  if (usernameIdentities.length > 0) {
+    await svc.postgres.writer.connection().tx(async (tx) => {
+      const platformGroups = groupBy(usernameIdentities, (i) => i.platform)
 
-          for (const username of usernameArray) {
-            const usernames: string[] = []
-            if (typeof username === 'string') {
-              usernames.push(username)
-            } else if (typeof username === 'object') {
-              if ('username' in username) {
-                usernames.push(username.username)
-              } else if (platform in username) {
-                if (typeof username[platform] === 'string') {
-                  usernames.push(username[platform])
-                } else if (Array.isArray(username[platform])) {
-                  if (username[platform].length === 0) {
-                    // throw new Error400(this.options.language, 'activity.platformAndUsernameNotMatching')
-                  } else if (typeof username[platform] === 'string') {
-                    usernames.push(...username[platform])
-                  } else if (typeof username[platform][0] === 'object') {
-                    usernames.push(...username[platform].map((u) => u.username))
-                  }
-                } else if (typeof username[platform] === 'object') {
-                  usernames.push(username[platform].username)
-                } else {
-                  // throw new Error400(this.options.language, 'activity.platformAndUsernameNotMatching')
-                }
-              } else {
-                // throw new Error400(this.options.language, 'activity.platformAndUsernameNotMatching')
-              }
-            }
+      for (const [platform, identities] of platformGroups) {
+        const values = distinct(identities.map((i) => i.value))
 
-            // Check if a member with this username already exists.
-            const existingMember = await svc.postgres.reader.connection().query(
-              `SELECT mi."memberId"
-              FROM "memberIdentities" mi
-              WHERE mi."tenantId" = $1 AND
-                    mi.platform = $2 AND
-                    mi.username in ($3) AND
-                    EXISTS (SELECT 1 FROM "memberSegments" ms WHERE ms."memberId" = mi."memberId")`,
-              [input.member.tenantId, platform, usernames],
-            )
+        // Check if any members with this username already exists.
+        const existingMembers = await findExistingMember(
+          svc.postgres.reader,
+          input.member.id,
+          input.member.tenantId,
+          platform,
+          values,
+          MemberIdentityType.USERNAME,
+        )
 
-            // Add the member to merge suggestions.
-            if (existingMember) {
-              await tx.query(
-                `INSERT INTO "memberToMerge" ("memberId", "toMergeId", similarity)
-                VALUES ($1, $2, $3);"`,
-                [input.member.id, existingMember.id, 0.9],
-              )
-
-              // Filter out the identity that belongs to another member from the normalized payload
-              if (Array.isArray(input.member.username[platform])) {
-                input.member.username[platform] = input.member.username[platform].filter(
-                  (u) => u !== username,
-                )
-              } else if (typeof input.member.username[platform] === 'string') {
-                delete input.member.username[platform]
-              } else {
-                throw new Error(
-                  `Unsupported data type for input.member.username[platform] "${input.member.username[platform]}".`,
-                )
-              }
-            }
-          }
+        for (const memberId of existingMembers) {
+          await addMemberToMerge(tx, input.member.id, memberId)
         }
-      })
-    } catch (err) {
-      throw new Error(err)
-    }
+      }
+    })
   }
 
-  return input.member
+  const emailIdentities = input.member.identities.filter((i) => i.type === MemberIdentityType.EMAIL)
+
+  if (emailIdentities.length > 0) {
+    await svc.postgres.writer.connection().tx(async (tx) => {
+      const platformGroups = groupBy(emailIdentities, (i) => i.platform)
+
+      for (const [platform, identities] of platformGroups) {
+        const values = distinct(identities.map((i) => i.value))
+
+        // Check if any members with this email already exists.
+        const existingMembers = await findExistingMember(
+          svc.postgres.reader,
+          input.member.id,
+          input.member.tenantId,
+          platform,
+          values,
+          MemberIdentityType.EMAIL,
+        )
+
+        for (const memberId of existingMembers) {
+          await addMemberToMerge(tx, input.member.id, memberId)
+        }
+      }
+    })
+  }
 }
 
 /*
@@ -131,61 +121,51 @@ export async function updateOrganizations(input: EnrichingMember): Promise<strin
     try {
       await svc.postgres.writer.connection().tx(async (tx) => {
         for (const workExperience of input.enrichment.work_experiences) {
-          const org = await tx.query(
-            `INSERT INTO organizations (id, "tenantId", "displayName", website, linkedin, location, "createdAt", "updatedAt")
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
-            ON CONFLICT (website,"tenantId") WHERE website IS NOT NULL DO
-            UPDATE SET "displayName" = EXCLUDED."displayName"
-            RETURNING id;`,
-            [
-              generateUUIDv4(),
-              input.member.tenantId,
-              workExperience.company,
-              workExperience.companyUrl,
-              workExperience.companyLinkedInUrl
-                ? {
-                    url: workExperience.companyLinkedInUrl,
-                    handle: workExperience.companyLinkedInUrl.split('/').pop(),
-                  }
-                : null,
-              workExperience.location,
-              new Date(Date.now()),
-            ],
-          )
-
-          organizations.push(org[0].id)
-
-          const organizationIdentities: IOrganizationIdentity[] = [
+          const identities: IOrganizationIdentity[] = [
             {
-              name: workExperience.company,
-              platform: PlatformType.ENRICHMENT,
+              platform: PlatformType.LINKEDIN,
+              value: workExperience.companyUrl,
+              type: OrganizationIdentityType.PRIMARY_DOMAIN,
+              verified: true,
+            },
+            {
+              platform: PlatformType.LINKEDIN,
+              value: `company:${workExperience.companyLinkedInUrl.split('/').pop()}`,
+              type: OrganizationIdentityType.USERNAME,
+              verified: true,
             },
           ]
 
-          if (workExperience.companyLinkedInUrl) {
-            organizationIdentities.push({
-              name: workExperience.companyLinkedInUrl.split('/').pop(),
-              platform: PlatformType.LINKEDIN,
-              url: workExperience.companyLinkedInUrl,
-            })
+          // find existing org by identity
+          let organizationId
+          for (const i of identities) {
+            organizationId = await findOrganizationByVerifiedIdentity(tx, input.member.tenantId, i)
           }
 
-          for (const orgIdentity of organizationIdentities) {
-            await tx.query(
-              `INSERT INTO "organizationIdentities" ("organizationId", "tenantId", name, platform, url)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT ON CONSTRAINT "organizationIdentities_platform_name_tenantId_key"
-            DO
-              UPDATE SET name = EXCLUDED.name, url = EXCLUDED.url
-              RETURNING "organizationId", "tenantId", name, platform, url;`,
-              [
-                org[0].id,
-                input.member.tenantId,
-                orgIdentity.name,
-                orgIdentity.platform,
-                orgIdentity.url,
-              ],
+          if (!organizationId) {
+            organizationId = await insertOrganization(
+              tx,
+              input.member.tenantId,
+              workExperience.company,
+              workExperience.location,
             )
+          }
+
+          organizations.push(organizationId)
+
+          // find existing identities
+          const existingIdentities = await findOrganizationIdentities(tx, organizationId)
+
+          for (const i of identities) {
+            const existing = existingIdentities.find(
+              (oi) => oi.platform === i.platform && oi.type === i.type && oi.value === i.value,
+            )
+
+            if (!existing) {
+              await insertOrgIdentity(tx, organizationId, input.member.tenantId, i)
+            } else if (existing.verified != i.verified) {
+              await updateOrgIdentity(tx, organizationId, input.member.tenantId, i)
+            }
           }
 
           const dateEnd = workExperience.endDate
@@ -194,7 +174,7 @@ export async function updateOrganizations(input: EnrichingMember): Promise<strin
 
           const data = {
             memberId: input.member.id,
-            organizationId: org[0].id,
+            organizationId,
             title: workExperience.title,
             dateStart: workExperience.startDate,
             dateEnd,
@@ -203,26 +183,9 @@ export async function updateOrganizations(input: EnrichingMember): Promise<strin
 
           // Clean up organizations without dates if we're getting ones with dates.
           if (data.dateStart) {
-            await tx.query(
-              `UPDATE "memberOrganizations"
-                SET "deletedAt" = NOW()
-                WHERE "memberId" = $1
-                AND "organizationId" = $2
-                AND "dateStart" IS NULL
-                AND "dateEnd" IS NULL
-              `,
-              [input.member.id, org[0].id],
-            )
+            await deleteMemberOrg(tx, input.member.id, organizationId)
           } else {
-            const rows = await svc.postgres.reader.connection().query(
-              `SELECT COUNT(*) AS count FROM "memberOrganizations"
-                WHERE "memberId" = $1
-                AND "organizationId" = $2
-                AND "dateStart" IS NOT NULL
-                AND "deletedAt" IS NULL
-              `,
-              [input.member.id, org[0].id],
-            )
+            const rows = await findMemberOrgs(svc.postgres.reader, input.member.id, organizationId)
             const row = rows[0]
 
             // If we're getting organization without dates, but there's already
@@ -232,26 +195,14 @@ export async function updateOrganizations(input: EnrichingMember): Promise<strin
             }
           }
 
-          let conflictCondition = `("memberId", "organizationId", "dateStart", "dateEnd")`
-          if (!dateEnd) {
-            conflictCondition = `("memberId", "organizationId", "dateStart") WHERE "dateEnd" IS NULL`
-          }
-          if (!data.dateStart) {
-            conflictCondition = `("memberId", "organizationId") WHERE "dateStart" IS NULL AND "dateEnd" IS NULL`
-          }
-
-          const onConflict =
-            data.source === OrganizationSource.UI
-              ? `ON CONFLICT ${conflictCondition} DO UPDATE SET "title" = $3, "dateStart" = $4, "dateEnd" = $5, "deletedAt" = NULL, "source" = $6`
-              : 'ON CONFLICT DO NOTHING'
-
-          await tx.query(
-            `
-              INSERT INTO "memberOrganizations" ("memberId", "organizationId", "createdAt", "updatedAt", "title", "dateStart", "dateEnd", "source")
-              VALUES ($1, $2, NOW(), NOW(), $3, $4, $5, $6)
-              ${onConflict};
-            `,
-            [input.member.id, org[0].id, data.title, data.dateStart, data.dateEnd, data.source],
+          await insertWorkExperience(
+            tx,
+            input.member.id,
+            organizationId,
+            data.title,
+            data.dateStart,
+            data.dateEnd,
+            data.source,
           )
         }
       })

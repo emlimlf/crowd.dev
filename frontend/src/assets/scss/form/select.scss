@@ -12,6 +12,10 @@
   @apply cursor-pointer;
 }
 
+.el-select .el-select__wrapper{
+  min-height: 40px;
+}
+
 // Select input
 .el-select {
   --el-select-border-color-hover: unset;
@@ -108,12 +112,12 @@
 
     // For multiple selection dropdowns
     .el-select-dropdown__item.selected::after {
-      @apply bg-brand-600;
+      @apply bg-primary-600;
     }
 
     & .el-select-dropdown__item {
       padding: 0 52px 0 20px;
-      @apply text-black rounded hover:bg-gray-50 flex items-center h-10;
+      @apply text-black rounded hover:bg-gray-50 flex items-center min-h-10 h-fit leading-5 py-1;
 
       // Select dropdown item prefix
       span.prefix {
@@ -123,7 +127,7 @@
       // Select dropdown item selected
       &.selected,
       &.selected.hover {
-        @apply font-medium bg-brand-50 text-gray-900;
+        @apply font-medium bg-primary-50 text-gray-900;
       }
 
       // Select dropdown item on hover

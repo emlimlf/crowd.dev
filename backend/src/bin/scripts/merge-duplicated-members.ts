@@ -1,6 +1,12 @@
 import { QueryTypes } from 'sequelize'
 import { Logger, getChildLogger, getServiceLogger } from '@crowd/logging'
 import { generateUUIDv1, timeout } from '@crowd/common'
+import { IMemberUsername, MemberIdentityType } from '@crowd/types'
+import {
+  MemberField,
+  fetchMemberIdentities,
+  findMemberById,
+} from '@crowd/data-access-layer/src/members'
 import MemberRepository from '../../database/repositories/memberRepository'
 import SequelizeRepository from '../../database/repositories/sequelizeRepository'
 import MemberService from '../../services/memberService'
@@ -75,7 +81,6 @@ async function check(): Promise<number> {
             count(*)                     as duplicate_count,
             coalesce(sum(ac.count), 0)   as total_activitites,
             json_agg(m.id)               as all_ids,
-            jsonb_agg(m.emails)          as all_emails,
             jsonb_agg(m.username)        as all_usernames
         from members m
                 left join activity_counts ac on ac."memberId" = m.id,
@@ -143,7 +148,7 @@ async function check(): Promise<number> {
         username: data.username,
       })
       logger.info(
-        'Can not automatically merge - first member in the group by joinedAt will get the identity and the rest will get them as weakIdentities.',
+        'Can not automatically merge - first member in the group by joinedAt will get the identity and the rest will get them as unverified identities.',
       )
 
       const options = { ...dbOptions, log: logger, currentTenant: { id: data.tenantId } }
@@ -152,18 +157,24 @@ async function check(): Promise<number> {
       try {
         transaction = await SequelizeRepository.createTransaction(options)
         const txOptions = { ...options, transaction }
+        const qx = SequelizeRepository.getQueryExecutor(txOptions, transaction)
 
-        const allMembers = []
+        const allMembers: { id: string; joinedAt: string; username: IMemberUsername }[] = []
         for (const id of data.all_ids) {
-          const member = await MemberRepository.findById(id, txOptions)
-          allMembers.push(member)
+          const member = await findMemberById(qx, id, [MemberField.ID, MemberField.JOINED_AT])
+          const identities = await fetchMemberIdentities(qx, id)
+          const username = MemberRepository.getUsernameFromIdentities(identities)
+          allMembers.push({
+            ...member,
+            username,
+          })
         }
 
         // sort so the oldest members by joinedAt are first
         allMembers.sort((a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime())
 
         // first member stays the same - it will keep the identity
-        // these ones will get the duplicated identity as weakIdentities
+        // these ones will get the duplicated identity as unverified ones
         const otherMembers = allMembers.slice(1)
 
         for (const member of otherMembers) {
@@ -181,9 +192,10 @@ async function check(): Promise<number> {
 
         logger.info('Adding duplicated identity to other members as weakIdentity...')
         // finally let's add the duplicated identity as weakIdentity
-        await MemberRepository.addToWeakIdentities(
+        await MemberRepository.addAsUnverifiedIdentity(
           otherMembers.map((m) => m.id),
           data.username,
+          MemberIdentityType.USERNAME,
           data.platform,
           txOptions,
         )

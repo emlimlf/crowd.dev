@@ -1,0 +1,44 @@
+.c-badge {
+  background: var(--lf-badge-background);
+  border: rem(1) solid var(--lf-badge-border);
+  color: var(--lf-badge-text);
+
+  font-size: var(--lf-badge-font-size);
+  height: var(--lf-badge-height);
+  line-height: calc(var(--lf-badge-height) - rem(2));
+  padding: 0 var(--lf-badge-padding);
+
+  @apply rounded-md inline-block font-normal;
+
+  /* Badge types */
+  &--primary{
+    --lf-badge-background: var(--lf-badge-primary-background);
+    --lf-badge-border: var(--lf-badge-primary-border);
+    --lf-badge-text: var(--lf-badge-primary-text);
+  }
+
+  &--secondary{
+    --lf-badge-background: var(--lf-badge-secondary-background);
+    --lf-badge-border: var(--lf-badge-secondary-border);
+    --lf-badge-text: var(--lf-badge-secondary-text);
+  }
+
+  &--tertiary{
+    --lf-badge-background: var(--lf-badge-tertiary-background);
+    --lf-badge-border: var(--lf-badge-tertiary-border);
+    --lf-badge-text: var(--lf-badge-tertiary-text);
+  }
+
+  /* Badge sizes */
+  &--small{
+    --lf-badge-font-size: var(--lf-badge-small-font-size);
+    --lf-badge-height: var(--lf-badge-small-height);
+    --lf-badge-padding: var(--lf-badge-small-padding);
+  }
+
+  &--medium{
+    --lf-badge-font-size: var(--lf-badge-medium-font-size);
+    --lf-badge-height: var(--lf-badge-medium-height);
+    --lf-badge-padding: var(--lf-badge-medium-padding);
+  }
+}

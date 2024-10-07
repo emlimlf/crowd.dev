@@ -1,23 +1,20 @@
 <template>
   <div class="member-view-aside panel !px-0">
-    <div>
-      <app-organization-aside-identities
+    <app-organization-aside-identities
+      :organization="organization"
+      @unmerge="emit('unmerge', $event)"
+    />
+  </div>
+
+  <div v-if="shouldShowAttributes" class="member-view-aside panel !px-0 mt-6">
+    <div class="px-6">
+      <div class="font-medium text-black">
+        Attributes
+      </div>
+
+      <app-organization-aside-enriched
         :organization="organization"
       />
-
-      <div v-if="shouldShowAttributes">
-        <el-divider class="!my-8" />
-
-        <div class="mt-10 px-6">
-          <div class="font-medium text-black">
-            Attributes
-          </div>
-
-          <app-organization-aside-enriched
-            :organization="organization"
-          />
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -26,8 +23,9 @@
 import { computed } from 'vue';
 import enrichmentAttributes from '@/modules/organization/config/enrichment';
 import { AttributeType } from '@/modules/organization/types/Attributes';
-import { mapGetters } from '@/shared/vuex/vuex.helpers';
 import Plans from '@/security/plans';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import { storeToRefs } from 'pinia';
 import AppOrganizationAsideEnriched from './_aside/_aside-enriched.vue';
 import AppOrganizationAsideIdentities from './_aside/_aside-identities.vue';
 
@@ -38,10 +36,13 @@ const props = defineProps({
   },
 });
 
-const { currentTenant } = mapGetters('auth');
+const emit = defineEmits(['unmerge']);
+
+const authStore = useAuthStore();
+const { tenant } = storeToRefs(authStore);
 
 const shouldShowAttributes = computed(() => {
-  if (currentTenant.value.plan === Plans.values.essential) {
+  if (tenant.value.plan === Plans.values.essential) {
     return true;
   }
   return enrichmentAttributes.some((a) => {

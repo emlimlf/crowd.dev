@@ -1,30 +1,25 @@
 <template>
   <el-dropdown
+    v-if="hasPermission(LfPermission.conversationEdit)"
     trigger="click"
     placement="bottom-end"
     @command="$event()"
   >
     <button
-      class="el-dropdown-link btn p-1.5 rounder-md hover:bg-gray-200 text-gray-600"
+      class="el-dropdown-link btn p-1.5 rounder-md hover:bg-gray-200 text-gray-400"
       type="button"
       @click.stop
     >
-      <i class="text-xl ri-more-fill" />
+      <i class="text-lg ri-more-fill" />
     </button>
     <template #dropdown>
       <el-dropdown-item
         :command="onDeleteConversation"
-        :disabled="isDeleteLockedForSampleData"
       >
         <i
-          class="ri-delete-bin-line mr-1"
-          :class="{
-            'text-red-500': !isDeleteLockedForSampleData,
-          }"
+          class="ri-delete-bin-line mr-1 text-red-500"
         /><span
-          :class="{
-            'text-red-500': !isDeleteLockedForSampleData,
-          }"
+          class="text-red-500"
         >Delete conversation</span>
       </el-dropdown-item>
     </template>
@@ -33,26 +28,25 @@
 
 <script setup lang="ts">
 import ConfirmDialog from '@/shared/dialog/confirm-dialog';
-import { computed } from 'vue';
-import { mapGetters } from '@/shared/vuex/vuex.helpers';
 import Message from '@/shared/message/message';
 import { i18n } from '@/i18n';
-import { ConversationPermissions } from '../conversation-permissions';
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
+import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
 import { ConversationService } from '../conversation-service';
 
 const emit = defineEmits<{(e: 'conversation-destroyed'): void}>();
 const props = defineProps<{
   conversation: {
     id: string
+    platform: string;
   },
 }>();
 
-const { currentTenant, currentUser } = mapGetters('auth');
+const { trackEvent } = useProductTracking();
 
-const isDeleteLockedForSampleData = computed(() => new ConversationPermissions(
-  currentTenant.value,
-  currentUser.value,
-).destroyLockedForSampleData);
+const { hasPermission } = usePermissions();
 
 const onDeleteConversation = async () => {
   try {
@@ -64,6 +58,14 @@ const onDeleteConversation = async () => {
       confirmButtonText: 'Confirm',
       cancelButtonText: 'Cancel',
       icon: 'ri-delete-bin-line',
+    });
+
+    trackEvent({
+      key: FeatureEventKey.DELETE_CONVERSATION,
+      type: EventType.FEATURE,
+      properties: {
+        conversationPlatform: props.conversation.platform,
+      },
     });
 
     await ConversationService.destroyAll([props.conversation.id]);

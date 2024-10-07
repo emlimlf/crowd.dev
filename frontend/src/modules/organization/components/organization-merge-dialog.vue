@@ -19,10 +19,12 @@
           </div>
           <div class="w-1/2 px-3">
             <app-organization-selection-dropdown
-              v-if="organizationToMerge === null"
+              v-if="!organizationToMerge"
               :id="props.modelValue?.id"
               v-model="organizationToMerge"
+              :primary-organization="props.modelValue"
               style="margin-right: 5px"
+              @update:model-value="checkPrimaryOrganization"
             />
             <app-organization-merge-suggestions-details
               v-else
@@ -37,8 +39,8 @@
                   type="button"
                   @click="changeOrganization()"
                 >
-                  <span class="ri-refresh-line text-base text-brand-500 mr-2" />
-                  <span class="text-brand-500">Change organization</span>
+                  <span class="ri-refresh-line text-base text-primary-500 mr-2" />
+                  <span class="text-primary-500">Change organization</span>
                 </button>
               </template>
             </app-organization-merge-suggestions-details>
@@ -63,7 +65,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppDialog from '@/shared/dialog/dialog.vue';
 import AppOrganizationMergeSuggestionsDetails
@@ -72,15 +74,23 @@ import { useOrganizationStore } from '@/modules/organization/store/pinia';
 import { OrganizationService } from '@/modules/organization/organization-service';
 import AppOrganizationSelectionDropdown from '@/modules/organization/components/organization-selection-dropdown.vue';
 import useOrganizationMergeMessage from '@/shared/modules/merge/config/useOrganizationMergeMessage';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
 
 const props = defineProps({
   modelValue: {
     type: Object,
     required: true,
   },
+  toMerge: {
+    type: Object,
+    default: null,
+  },
 });
 
 const emit = defineEmits(['update:modelValue']);
+
+const { trackEvent } = useProductTracking();
 
 const route = useRoute();
 const router = useRouter();
@@ -102,9 +112,21 @@ const isModalOpen = computed({
   },
 });
 
+watch(() => props.toMerge, (toMerge) => {
+  if (toMerge) {
+    organizationToMerge.value = toMerge;
+  }
+});
+
 const changeOrganization = () => {
   organizationToMerge.value = null;
   originalOrganizationPrimary.value = true;
+};
+
+const checkPrimaryOrganization = (orgToMerge) => {
+  if (orgToMerge.lfxMembership) {
+    originalOrganizationPrimary.value = false;
+  }
 };
 
 const mergeSuggestion = () => {
@@ -118,6 +140,14 @@ const mergeSuggestion = () => {
   const secondaryOrganization = originalOrganizationPrimary.value ? organizationToMerge.value : props.modelValue;
 
   const { loadingMessage, apiErrorMessage } = useOrganizationMergeMessage;
+
+  trackEvent({
+    key: FeatureEventKey.MERGE_ORGANIZATION,
+    type: EventType.FEATURE,
+    properties: {
+      path: route.path,
+    },
+  });
 
   OrganizationService.mergeOrganizations(primaryOrganization.id, secondaryOrganization.id)
     .then(() => {

@@ -1,0 +1,95 @@
+.c-checkbox {
+  font-size: var(--lf-checkbox-font-size);
+  line-height: var(--lf-checkbox-line-height);
+  font-weight: var(--lf-checkbox-text-font-weight);
+  color: var(--lf-checkbox-text-color);
+  @apply flex flex-wrap relative;
+
+  input {
+    height: var(--lf-checkbox-size);
+    width: var(--lf-checkbox-size);
+    border: rem(1) solid var(--lf-checkbox-border);
+    background: var(--lf-checkbox-background);
+    border-radius: var(--lf-checkbox-border-radius);
+    box-shadow: var(--lf-checkbox-shadow);
+
+    --lf-checkbox-border: var(--lf-checkbox-unchecked-border);
+    --lf-checkbox-background: var(--lf-checkbox-unchecked-background);
+
+    @apply transition-all appearance-none p-0 my-0 ml-0 inline-block mr-2 cursor-pointer;
+
+    // Text
+    & + span{
+      @apply cursor-pointer select-none;
+    }
+
+    // Icon
+    &:before{
+      content: "\eb7b";
+      font-family: 'remixicon', serif;
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: var(--lf-checkbox-icon);
+      line-height: var(--lf-checkbox-size);
+      width: var(--lf-checkbox-size);
+      font-size: var(--lf-checkbox-size);
+
+      --lf-checkbox-icon: var(--lf-checkbox-unchecked-icon);
+    }
+
+    // Checked
+    &:checked{
+      --lf-checkbox-border: var(--lf-checkbox-checked-border);
+      --lf-checkbox-background: var(--lf-checkbox-checked-background);
+      --lf-checkbox-icon: var(--lf-checkbox-checked-icon);
+    }
+
+    // Disabled
+    &:disabled {
+      --lf-checkbox-border: var(--lf-checkbox-disabled-unchecked-border);
+      --lf-checkbox-background: var(--lf-checkbox-disabled-unchecked-background);
+      --lf-checkbox-icon: var(--lf-checkbox-disabled-unchecked-icon);
+      @apply cursor-not-allowed;
+
+      &:checked {
+        --lf-checkbox-border: var(--lf-checkbox-disabled-checked-border);
+        --lf-checkbox-background: var(--lf-checkbox-disabled-checked-background);
+        --lf-checkbox-icon: var(--lf-checkbox-disabled-checked-icon);
+      }
+
+      & + span{
+        @apply cursor-not-allowed;
+      }
+    }
+  }
+
+  // Checkbox sizes
+  &--small {
+    --lf-checkbox-size: var(--lf-checkbox-small-size);
+    --lf-checkbox-font-size: var(--lf-checkbox-small-font-size);
+    --lf-checkbox-line-height: var(--lf-checkbox-small-line-height);
+  }
+
+  &--medium {
+    --lf-checkbox-size: var(--lf-checkbox-medium-size);
+    --lf-checkbox-font-size: var(--lf-checkbox-medium-font-size);
+    --lf-checkbox-line-height: var(--lf-checkbox-medium-line-height);
+  }
+
+  // Multiple state
+  // Change icon to subtract-line
+  &--multiple {
+    input:before{
+      content: "\f1af";
+    }
+  }
+
+  p{
+    font-size: var(--lf-checkbox-description-font-size);
+    line-height: var(--lf-checkbox-description-line-height);
+    font-weight: var(--lf-checkbox-description-font-weight);
+    color: var(--lf-checkbox-description-color);
+    margin-top: var(--lf-checkbox-description-spacing);
+  }
+}

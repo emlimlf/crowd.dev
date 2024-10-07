@@ -2,6 +2,7 @@ import lodash from 'lodash'
 import Sequelize, { QueryTypes } from 'sequelize'
 import { IntegrationRunState, PlatformType } from '@crowd/types'
 import { Error404 } from '@crowd/common'
+import { captureApiChange, integrationConnectAction } from '@crowd/audit-logs'
 import SequelizeRepository from './sequelizeRepository'
 import AuditLogRepository from './auditLogRepository'
 import SequelizeFilterUtils from '../utils/sequelizeFilterUtils'
@@ -26,28 +27,33 @@ class IntegrationRepository {
 
     const segment = SequelizeRepository.getStrictlySingleActiveSegment(options)
 
-    const record = await options.database.integration.create(
-      {
-        ...lodash.pick(data, [
-          'platform',
-          'status',
-          'limitCount',
-          'limitLastResetAt',
-          'token',
-          'refreshToken',
-          'settings',
-          'integrationIdentifier',
-          'importHash',
-          'emailSentAt',
-        ]),
-        segmentId: segment.id,
-        tenantId: tenant.id,
-        createdById: currentUser.id,
-        updatedById: currentUser.id,
-      },
-      {
-        transaction,
-      },
+    const toInsert = {
+      ...lodash.pick(data, [
+        'platform',
+        'status',
+        'limitCount',
+        'limitLastResetAt',
+        'token',
+        'refreshToken',
+        'settings',
+        'integrationIdentifier',
+        'importHash',
+        'emailSentAt',
+      ]),
+      segmentId: segment.id,
+      tenantId: tenant.id,
+      createdById: currentUser.id,
+      updatedById: currentUser.id,
+    }
+    const record = await options.database.integration.create(toInsert, {
+      transaction,
+    })
+
+    await captureApiChange(
+      options,
+      integrationConnectAction(record.id, async (captureState) => {
+        captureState(toInsert)
+      }),
     )
 
     await this._createAuditLog(AuditLogRepository.CREATE, record, data, options)
@@ -502,8 +508,8 @@ class IntegrationRepository {
       ...(parsed.where ? { where: parsed.where } : {}),
       ...(parsed.having ? { having: parsed.having } : {}),
       order: parsed.order,
-      limit: parsed.limit,
-      offset: parsed.offset,
+      limit: limit ? parsed.limit : undefined,
+      offset: offset ? parsed.offset : undefined,
       include,
       transaction: SequelizeRepository.getTransaction(options),
     })
@@ -515,31 +521,65 @@ class IntegrationRepository {
     const seq = SequelizeRepository.getSequelize(options)
 
     const integrationIds = rows.map((row) => row.id)
-    let results = []
 
     if (integrationIds.length > 0) {
-      const query = `select "integrationId", max("processedAt") as "processedAt" from "incomingWebhooks" 
-      where "integrationId" in (:integrationIds) and state = 'PROCESSED'
-      group by "integrationId"`
+      const webhookQuery = `
+        SELECT "integrationId", MAX("processedAt") AS "webhookProcessedAt"
+        FROM "incomingWebhooks"
+        WHERE "integrationId" IN (:integrationIds) AND state = 'PROCESSED'
+        GROUP BY "integrationId"
+      `
 
-      results = await seq.query(query, {
-        replacements: {
-          integrationIds,
-        },
-        type: QueryTypes.SELECT,
-        transaction: SequelizeRepository.getTransaction(options),
+      const runQuery = `
+        SELECT "integrationId", MAX("processedAt") AS "runProcessedAt"
+        FROM integration.runs
+        WHERE "integrationId" IN (:integrationIds)
+        GROUP BY "integrationId"
+      `
+
+      const [webhookResults, runResults] = await Promise.all([
+        seq.query(webhookQuery, {
+          replacements: { integrationIds },
+          type: QueryTypes.SELECT,
+          transaction: SequelizeRepository.getTransaction(options),
+        }),
+        seq.query(runQuery, {
+          replacements: { integrationIds },
+          type: QueryTypes.SELECT,
+          transaction: SequelizeRepository.getTransaction(options),
+        }),
+      ])
+
+      const processedAtMap = integrationIds.reduce((map, id) => {
+        const webhookResult: any = webhookResults.find(
+          (r: { integrationId: string }) => r.integrationId === id,
+        )
+        const runResult: any = runResults.find(
+          (r: { integrationId: string }) => r.integrationId === id,
+        )
+        map[id] = {
+          webhookProcessedAt: webhookResult ? webhookResult.webhookProcessedAt : null,
+          runProcessedAt: runResult ? runResult.runProcessedAt : null,
+        }
+        return map
+      }, {})
+
+      rows.forEach((row) => {
+        const processedAt = processedAtMap[row.id]
+        // Use the latest processedAt from either webhook or run, or fall back to updatedAt
+        row.lastProcessedAt = processedAt
+          ? new Date(
+              Math.max(
+                processedAt.webhookProcessedAt
+                  ? new Date(processedAt.webhookProcessedAt).getTime()
+                  : 0,
+                processedAt.runProcessedAt ? new Date(processedAt.runProcessedAt).getTime() : 0,
+                new Date(row.updatedAt).getTime(),
+              ),
+            )
+          : row.updatedAt
       })
     }
-
-    const processedAtMap = results.reduce((map, item) => {
-      map[item.integrationId] = item.processedAt
-      return map
-    }, {})
-
-    rows.forEach((row) => {
-      // Either use the last processedAt, or fall back updatedAt
-      row.lastProcessedAt = processedAtMap[row.id] || row.updatedAt
-    })
 
     return { rows, count, limit: parsed.limit, offset: parsed.offset }
   }

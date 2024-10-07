@@ -125,13 +125,16 @@ import { useStore } from 'vuex';
 import Nango from '@nangohq/frontend';
 import isEqual from 'lodash/isEqual';
 import { CrowdIntegrations } from '@/integrations/integrations-config';
-import AuthCurrentTenant from '@/modules/auth/auth-current-tenant';
+import { AuthService } from '@/modules/auth/services/auth.service';
 import config from '@/config';
 import { IntegrationService } from '@/modules/integration/integration-service';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
+import { Platform } from '@/shared/modules/platform/types/Platform';
 
 const store = useStore();
 
-const tenantId = computed(() => AuthCurrentTenant.get());
+const tenantId = computed(() => AuthService.getTenantId());
 
 const props = defineProps({
   modelValue: {
@@ -151,6 +154,8 @@ const subreddits = props.integration.settings?.subreddits.map((i) => ({
   touched: true,
   valid: true,
 })) || [{ value: '', loading: false }];
+
+const { trackEvent } = useProductTracking();
 
 const model = ref(JSON.parse(JSON.stringify(subreddits)));
 
@@ -216,6 +221,14 @@ const handleSubredditValidation = async (index) => {
 const callOnboard = useThrottleFn(async () => {
   await store.dispatch('integration/doRedditOnboard', {
     subreddits: model.value.map((i) => i.value),
+  });
+
+  const isUpdate = !!props.integration.settings?.subreddits;
+
+  trackEvent({
+    key: isUpdate ? FeatureEventKey.EDIT_INTEGRATION_SETTINGS : FeatureEventKey.CONNECT_INTEGRATION,
+    type: EventType.FEATURE,
+    properties: { platform: Platform.REDDIT },
   });
 }, 2000);
 

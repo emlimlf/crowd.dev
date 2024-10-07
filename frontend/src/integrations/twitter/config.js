@@ -14,6 +14,7 @@ export default {
   scale: true,
   chartColor: '#1D9BF0',
   showProfileLink: true,
+  urlPrefix: 'twitter.com/',
   activityDisplay: {
     showLinkToUrl: true,
   },
@@ -25,6 +26,7 @@ export default {
     }),
   },
   organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
+    identityHandle: ({ identityHandle }) => identityHandle,
+    identityLink: ({ identityHandle }) => `https://x.com/${identityHandle}`,
   },
 };

@@ -118,41 +118,6 @@
           </router-link>
         </div>
       </banner>
-
-      <!-- info 1 -->
-      <banner
-        v-else-if="integrationsInProgress.subProjects.length === 1"
-        variant="info"
-      >
-        <div
-          class="flex flex-wrap items-center justify-center grow text-sm"
-        >
-          <div
-            v-loading="true"
-            class="w-4 h-4 mr-3"
-          />
-          <span>{{ integrationsInProgressToString }} integration{{ integrationsInProgress.integrations.length > 1 ? 's are' : ' is' }}
-            getting set up on</span>
-          <span class="font-semibold mx-1">{{ integrationsInProgress.subProjects[0]?.name }}</span>
-          <span>sub-project. Sit back and relax. We will send you an email when it's done.</span>
-        </div>
-      </banner>
-
-      <!-- info 3 -->
-      <banner
-        v-else-if="integrationsInProgress.subProjects.length > 1"
-        variant="info"
-      >
-        <div
-          class="flex items-center justify-center grow text-sm"
-        >
-          <div
-            v-loading="true"
-            class="w-4 h-4 mr-3"
-          />
-          Integrations are getting set up on several sub-projects. Sit back and relax. We will send you an email when it's done.
-        </div>
-      </banner>
     </div>
   </div>
 </template>
@@ -165,10 +130,10 @@ import {
   watch, ref, computed, onUnmounted,
 } from 'vue';
 import { IntegrationService } from '@/modules/integration/integration-service';
-import { getSegmentsFromProjectGroup, hasAccessToSegmentId } from '@/utils/segments';
+import { getSegmentsFromProjectGroup } from '@/utils/segments';
 import { isCurrentDateAfterGivenWorkingDays } from '@/utils/date';
-import { CrowdIntegrations } from '@/integrations/integrations-config';
 import { useRoute } from 'vue-router';
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
 
 const ERROR_BANNER_WORKING_DAYS_DISPLAY = 3;
 
@@ -177,23 +142,11 @@ const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
 const integrations = ref([]);
 const fetchIntegrationTimer = ref(null);
 const loading = ref(true);
+const subProjects = ref([]);
 
 const route = useRoute();
 
-const subProjects = computed(() => {
-  if (!selectedProjectGroup.value) {
-    return [];
-  }
-
-  return selectedProjectGroup.value.projects
-    .reduce((acc, project) => {
-      project.subprojects.forEach((subproject) => {
-        acc.push(subproject);
-      });
-
-      return acc;
-    }, []);
-});
+const { hasAccessToSegmentId } = usePermissions();
 
 const integrationsWithErrors = computed(() => integrations.value.reduce((acc, integration) => {
   if (integration.status === 'error' && isCurrentDateAfterGivenWorkingDays(integration.updatedAt, ERROR_BANNER_WORKING_DAYS_DISPLAY)) {
@@ -202,7 +155,9 @@ const integrationsWithErrors = computed(() => integrations.value.reduce((acc, in
     if (!hasSubProject) {
       const subproject = subProjects.value.find((sp) => sp.id === integration.segmentId);
 
-      acc.push(subproject);
+      if (subproject) {
+        acc.push(subproject);
+      }
     }
   }
 
@@ -216,7 +171,9 @@ const integrationsWithNoData = computed(() => integrations.value.reduce((acc, in
     if (!hasSubProject) {
       const subproject = subProjects.value.find((sp) => sp.id === integration.segmentId);
 
-      acc.push(subproject);
+      if (subproject) {
+        acc.push(subproject);
+      }
     }
   }
 
@@ -232,7 +189,9 @@ const integrationsInProgress = computed(() => integrations.value.reduce((acc, in
     if (!hasSubProject) {
       const subproject = subProjects.value.find((sp) => sp.id === integration.segmentId);
 
-      acc.subProjects.push(subproject);
+      if (subproject) {
+        acc.subProjects.push(subproject);
+      }
     }
   }
 
@@ -242,25 +201,8 @@ const integrationsInProgress = computed(() => integrations.value.reduce((acc, in
   subProjects: [],
 }));
 
-const integrationsInProgressToString = computed(() => {
-  const arr = integrationsInProgress.value.integrations.map(
-    (i) => CrowdIntegrations.getConfig(i.platform)?.name,
-  );
-  if (arr.length === 1) {
-    return arr[0];
-  } if (arr.length === 2) {
-    return `${arr[0]} and ${arr[1]}`;
-  }
-  return (
-    `${arr.slice(0, arr.length - 1).join(', ')
-    }, and ${
-      arr.slice(-1)}`
-  );
-});
-
 const showBanner = computed(() => (integrationsWithErrors.value.length
-  || integrationsWithNoData.value.length
-  || integrationsInProgress.value.subProjects.length) && !route.meta.hideBanner && !!selectedProjectGroup.value && !loading.value);
+  || integrationsWithNoData.value.length) && !route.meta.hideBanner && !!selectedProjectGroup.value && !loading.value);
 
 const fetchIntegrations = (projectGroup) => {
   if (projectGroup) {
@@ -289,6 +231,21 @@ watch(selectedProjectGroup, (updatedProjectGroup, previousProjectGroup) => {
   if (previousProjectGroup?.id !== updatedProjectGroup?.id) {
     loading.value = true;
     fetchIntegrations(updatedProjectGroup);
+  }
+
+  if (!updatedProjectGroup) {
+    subProjects.value = [];
+  } else {
+    subProjects.value = updatedProjectGroup.projects
+      .reduce((acc, project) => {
+        project.subprojects.forEach((subproject) => {
+          if (subproject) {
+            acc.push(subproject);
+          }
+        });
+
+        return acc;
+      }, []);
   }
 }, {
   deep: true,

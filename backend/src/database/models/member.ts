@@ -20,10 +20,6 @@ export default (sequelize) => {
           notEmpty: true,
         },
       },
-      emails: {
-        type: DataTypes.ARRAY(DataTypes.TEXT),
-        defaultValue: [],
-      },
       score: {
         type: DataTypes.INTEGER,
         defaultValue: -1,
@@ -61,6 +57,11 @@ export default (sequelize) => {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,
+      },
+      manuallyChangedFields: {
+        type: DataTypes.ARRAY(DataTypes.TEXT),
+        allowNull: true,
+        default: [],
       },
     },
     {
@@ -110,15 +111,6 @@ export default (sequelize) => {
       as: 'segments',
       through: 'memberSegments',
       timestamps: false,
-    })
-
-    models.member.hasOne(models.memberActivityAggregatesMV, {
-      as: 'memberActivityAggregatesMVs',
-      foreignKey: 'id',
-    })
-
-    models.member.hasMany(models.activity, {
-      as: 'activities',
     })
 
     models.member.belongsToMany(models.note, {

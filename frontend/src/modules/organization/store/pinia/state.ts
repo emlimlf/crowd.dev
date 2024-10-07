@@ -11,6 +11,10 @@ export interface OrganizationState {
   totalOrganizations: number;
   mergedOrganizations: {
     [key: string]: string;
+  };
+  toMergeOrganizations: {
+    originalId: string | null;
+    toMergeId: string | null;
   }
 }
 
@@ -24,6 +28,10 @@ const state: OrganizationState = {
   selectedOrganizations: [],
   totalOrganizations: 0,
   mergedOrganizations: {},
+  toMergeOrganizations: {
+    originalId: null,
+    toMergeId: null,
+  },
 };
 
 export default () => state;

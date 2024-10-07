@@ -1,9 +1,18 @@
 import authAxios from '@/shared/axios/auth-axios';
-import AuthCurrentTenant from '@/modules/auth/auth-current-tenant';
+import { AuthService } from '@/modules/auth/services/auth.service'; import { storeToRefs } from 'pinia';
+import { useLfSegmentsStore } from '@/modules/lf/segments/store';
+import { getSegmentsFromProjectGroup } from '@/utils/segments';
+
+const getSelectedProjectGroup = () => {
+  const lsSegmentsStore = useLfSegmentsStore();
+  const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
+
+  return selectedProjectGroup.value;
+};
 
 export class OrganizationService {
   static async update(id, data, segments) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.put(
       `/tenant/${tenantId}/organization/${id}`,
@@ -22,7 +31,7 @@ export class OrganizationService {
       segments,
     };
 
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.delete(
       `/tenant/${tenantId}/organization`,
@@ -35,12 +44,37 @@ export class OrganizationService {
   }
 
   static async mergeOrganizations(organizationToKeepId, organizationToMergeId) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.put(
       `/tenant/${tenantId}/organization/${organizationToKeepId}/merge`,
       {
         organizationToMerge: organizationToMergeId,
+        segments: [getSelectedProjectGroup().id],
+      },
+    );
+
+    return response.data;
+  }
+
+  static async unmerge(orgId, preview) {
+    const tenantId = AuthService.getTenantId();
+
+    const response = await authAxios.post(
+      `/tenant/${tenantId}/organization/${orgId}/unmerge`,
+      preview,
+    );
+
+    return response.data;
+  }
+
+  static async unmergePreview(orgId, identity) {
+    const tenantId = AuthService.getTenantId();
+
+    const response = await authAxios.post(
+      `/tenant/${tenantId}/organization/${orgId}/unmerge/preview`,
+      {
+        ...identity,
       },
     );
 
@@ -48,7 +82,7 @@ export class OrganizationService {
   }
 
   static async addToNoMerge(organizationA, organizationB) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.put(
       `/tenant/${tenantId}/organization/${organizationA.id}/no-merge`,
@@ -61,7 +95,7 @@ export class OrganizationService {
   }
 
   static async noMergeOrganizations(organizationAId, organizationBId) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.put(
       `/tenant/${tenantId}/organization/${organizationAId}/no-merge`,
@@ -74,7 +108,7 @@ export class OrganizationService {
   }
 
   static async create(data, segments) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.post(
       `/tenant/${tenantId}/organization`,
@@ -88,15 +122,11 @@ export class OrganizationService {
   }
 
   static async find(id, segments) {
-    const sampleTenant = AuthCurrentTenant.getSampleTenantData();
-    const tenantId = sampleTenant?.id || AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.get(
       `/tenant/${tenantId}/organization/${id}`,
       {
-        headers: {
-          Authorization: sampleTenant?.token,
-        },
         params: {
           segmentId: segments[0],
           // The parameter id on this one is sematically different, so we are excluding the logic to add segments as an array
@@ -111,37 +141,145 @@ export class OrganizationService {
   static async query(
     body,
   ) {
-    const sampleTenant = AuthCurrentTenant.getSampleTenantData();
-    const tenantId = sampleTenant?.id || AuthCurrentTenant.get();
-
+    const tenantId = AuthService.getTenantId();
     const response = await authAxios.post(
       `/tenant/${tenantId}/organization/query`,
       body,
+    );
+
+    return response.data;
+  }
+
+  static async organizationsList(
+    body,
+  ) {
+    const tenantId = AuthService.getTenantId();
+    const response = await authAxios.post(
+      `/tenant/${tenantId}/organization/list`,
+      body,
+    );
+
+    return response.data;
+  }
+
+  static async listByIds(
+    ids,
+  ) {
+    const tenantId = AuthService.getTenantId();
+
+    const response = await authAxios.post(
+      `/tenant/${tenantId}/organization/id`,
       {
-        headers: {
-          Authorization: sampleTenant?.token,
-        },
+        ids,
       },
     );
 
     return response.data;
   }
 
-  static async listAutocomplete({
+  static async listOrganizationsAutocomplete({
     query,
+    limit,
+    segments = null,
+    excludeLfMember = false,
+    excludeSegments = false,
+  }) {
+    const payload = {
+      filter: {
+        and: [
+          {
+            displayName: {
+              matchPhrasePrefix: query,
+            },
+          },
+          // ...(excludeLfMember ? [{
+          //   lfxMembership: {
+          //     ne: true,
+          //   },
+          // }] : []),
+        ],
+      },
+      offset: 0,
+      orderBy: 'displayName_ASC',
+      limit,
+      ...(segments && {
+        segments,
+      }),
+      ...(excludeSegments && {
+        excludeSegments,
+      }),
+    };
+
+    const tenantId = AuthService.getTenantId();
+
+    const response = await authAxios.post(
+      `/tenant/${tenantId}/organization/autocomplete`,
+      payload,
+    );
+
+    return response.data.rows
+      .map((o) => ({
+        ...o,
+        label: o.displayName,
+        value: o.id,
+      }));
+  }
+
+  static async fetchMergeSuggestions(limit, offset, query) {
+    const tenantId = AuthService.getTenantId();
+
+    const segments = [
+      ...getSegmentsFromProjectGroup(getSelectedProjectGroup()),
+      getSelectedProjectGroup().id,
+    ];
+
+    const data = {
+      limit,
+      offset,
+      segments,
+      detail: true,
+      ...query,
+    };
+
+    return authAxios.post(
+      `/tenant/${tenantId}/organizationsToMerge`,
+      data,
+    )
+      .then(({ data }) => Promise.resolve(data));
+  }
+
+  static async listActive({
+    platform,
+    isTeamOrganization,
+    activityTimestampFrom,
+    activityTimestampTo,
+    orderBy,
+    offset,
     limit,
     segments,
   }) {
     const params = {
-      query,
+      ...(platform.length && {
+        'filter[platforms]': platform
+          .map((p) => p.value)
+          .join(','),
+      }),
+      ...(isTeamOrganization === false && {
+        'filter[isTeamOrganization]': isTeamOrganization,
+      }),
+      'filter[activityTimestampFrom]':
+        activityTimestampFrom,
+      'filter[activityTimestampTo]': activityTimestampTo,
+      orderBy,
+      offset,
       limit,
       segments,
     };
 
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.get(
-      `/tenant/${tenantId}/organization/autocomplete`,
+      `/tenant/${tenantId}/organization/active`,
       {
         params,
       },
@@ -150,25 +288,28 @@ export class OrganizationService {
     return response.data;
   }
 
-  static async fetchMergeSuggestions(limit, offset, query) {
-    const sampleTenant = AuthCurrentTenant.getSampleTenantData();
-    const tenantId = sampleTenant?.id || AuthCurrentTenant.get();
-
-    const params = {
+  static async export({
+    filter,
+    orderBy,
+    limit,
+    offset,
+    segments = [],
+  }) {
+    const body = {
+      filter,
+      orderBy,
       limit,
       offset,
-      ...query,
+      segments,
     };
 
-    return authAxios.get(
-      `/tenant/${tenantId}/organizationsToMerge`,
-      {
-        params,
-        headers: {
-          Authorization: sampleTenant?.token,
-        },
-      },
-    )
-      .then(({ data }) => Promise.resolve(data));
+    const tenantId = AuthService.getTenantId();
+
+    const response = await authAxios.post(
+      `/tenant/${tenantId}/organization/export`,
+      body,
+    );
+
+    return response.data;
   }
 }

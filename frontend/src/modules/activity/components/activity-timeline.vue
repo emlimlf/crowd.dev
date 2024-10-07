@@ -1,6 +1,6 @@
 <template>
   <div class="activity-timeline">
-    <div class="my-6">
+    <div class="mb-6">
       <div class="flex gap-2">
         <el-input
           v-model="query"
@@ -124,9 +124,9 @@
                     "
                   >
                     <i
-                      class="ri-lg ri-arrow-right-up-line mr-1"
+                      class="text-sm ri-eye-line mr-1"
                     />
-                    <span class="block whitespace-nowrap">Open conversation</span>
+                    <span class="block whitespace-nowrap">View {{ activity.platform !== Platform.GIT ? 'conversation' : 'commit' }}</span>
                   </a>
                   <app-activity-dropdown
                     v-if="showAffiliations"
@@ -139,37 +139,48 @@
                 </div>
               </div>
 
-              <app-lf-activity-parent
-                v-if="activity.parent && isMemberEntity"
-                :parent="activity.parent"
-              />
+              <!-- For now only render a special UI for Git -->
+              <div v-if="activity.platform === Platform.GIT">
+                <lf-activity-display
+                  :activity="activity"
+                  in-profile
+                />
+              </div>
+              <div v-else>
+                <app-lf-activity-parent
+                  v-if="activity.parent && isMemberEntity"
+                  :parent="activity.parent"
+                />
 
-              <app-activity-content
-                v-if="activity.title || activity.body"
-                class="text-sm bg-gray-50 rounded-lg p-4 mt-3"
-                :activity="activity"
-                :show-more="true"
-              >
-                <template v-if="platformDetails(activity.platform)?.activityDisplay?.showContentDetails" #details>
-                  <div v-if="activity.attributes">
-                    <app-activity-content-footer
-                      :source-id="activity.sourceId"
-                      :changes="activity.attributes.lines"
-                      changes-copy="line"
-                      :insertions="activity.attributes.insertions"
-                      :deletions="activity.attributes.deletions"
-                    />
-                  </div>
-                </template>
+                <app-activity-content
+                  v-if="activity.title || activity.body"
+                  class="text-sm bg-gray-50 rounded-lg p-4 mt-3"
+                  :activity="activity"
+                  :show-more="true"
+                >
+                  <template v-if="platformDetails(activity.platform)?.activityDisplay?.showContentDetails" #details>
+                    <div v-if="activity.attributes">
+                      <app-activity-content-footer
+                        :source-id="isMemberEntity && activity.parent ? activity.parent?.sourceId : activity.sourceId"
+                        :changes="activity.attributes.lines"
+                        changes-copy="line"
+                        :insertions="activity.attributes.insertions"
+                        :deletions="activity.attributes.deletions"
+                        :display-source-id="isMemberEntity && activity.parent
+                          ? activity.parent?.type === 'authored-commit' : activity.type === 'authored-commit'"
+                      />
+                    </div>
+                  </template>
 
-                <template #bottomLink>
-                  <div v-if="activity.url" class="pt-6">
-                    <app-activity-link
-                      :activity="activity"
-                    />
-                  </div>
-                </template>
-              </app-activity-content>
+                  <template #bottomLink>
+                    <div v-if="activity.url" class="pt-6">
+                      <app-activity-link
+                        :activity="activity"
+                      />
+                    </div>
+                  </template>
+                </app-activity-content>
+              </div>
             </div>
             <template #dot>
               <span
@@ -193,19 +204,12 @@
           </el-timeline-item>
         </template>
 
-        <div
+        <app-empty-state-cta
           v-if="!activities.length && !loading"
-          class="flex items-center justify-center pt-6 pb-5"
-        >
-          <div
-            class="ri-list-check-2 text-3xl text-gray-300 mr-4 h-10 flex items-center"
-          />
-          <p
-            class="text-xs leading-5 text-center italic text-gray-400"
-          >
-            This contributor has no activities in {{ getPlatformDetails(platform)?.name || 'custom platforms' }}
-          </p>
-        </div>
+          icon="ri-list-check-2"
+          title="No activities found"
+          description="We couldn't find any results that match your search criteria, please try a different query"
+        />
       </el-timeline>
       <div
         v-if="loading"
@@ -246,17 +250,19 @@ import debounce from 'lodash/debounce';
 import AppActivityHeader from '@/modules/activity/components/activity-header.vue';
 import AppActivityContent from '@/modules/activity/components/activity-content.vue';
 import { onSelectMouseLeave } from '@/utils/select';
-import authAxios from '@/shared/axios/auth-axios';
 import { CrowdIntegrations } from '@/integrations/integrations-config';
 import AppMemberDisplayName from '@/modules/member/components/member-display-name.vue';
 import AppActivityLink from '@/modules/activity/components/activity-link.vue';
-import AuthCurrentTenant from '@/modules/auth/auth-current-tenant';
 import AppActivityContentFooter from '@/modules/activity/components/activity-content-footer.vue';
 import AppLfActivityParent from '@/modules/lf/activity/components/lf-activity-parent.vue';
 import AppConversationDrawer from '@/modules/conversation/components/conversation-drawer.vue';
 import AppActivityDropdown from '@/modules/activity/components/activity-dropdown.vue';
 import { storeToRefs } from 'pinia';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
+import { getSegmentsFromProjectGroup } from '@/utils/segments';
+import { Platform } from '@/shared/modules/platform/types/Platform';
+import LfActivityDisplay from '@/shared/modules/activity/components/activity-display.vue';
+import { ActivityService } from '../activity-service';
 
 const SearchIcon = h(
   'i', // type
@@ -278,10 +284,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selectedSegment: {
+    type: String,
+    default: null,
+  },
 });
 
 const lsSegmentsStore = useLfSegmentsStore();
-const { projectGroups } = storeToRefs(lsSegmentsStore);
+const { projectGroups, selectedProjectGroup } = storeToRefs(lsSegmentsStore);
 
 const conversationId = ref(null);
 
@@ -302,7 +312,7 @@ const activities = ref([]);
 const limit = ref(20);
 const offset = ref(0);
 const noMore = ref(false);
-const selectedSegment = ref(null);
+const selectedSegment = ref(props.selectedSegment || null);
 
 let filter = {};
 
@@ -321,50 +331,35 @@ const subprojects = computed(() => projectGroups.value.list.reduce((acc, project
   return acc;
 }, {}));
 
-const segments = computed(() => props.entity.segments?.map((s) => {
-  if (typeof s === 'string') {
-    return subprojects.value[s];
+const segments = computed(() => {
+  if (!props.entity.segments) {
+    return getSegmentsFromProjectGroup(selectedProjectGroup.value)?.map((s) => subprojects.value[s]) || [];
   }
+  return props.entity.segments?.map((s) => {
+    if (typeof s === 'string') {
+      return subprojects.value[s];
+    }
 
-  return s;
-}) || []);
+    return s;
+  }).filter((s) => !!s) || [];
+});
 
 const fetchActivities = async ({ reset } = { reset: false }) => {
   const filterToApply = {
-    platform: platform.value ?? undefined,
+    platform: platform.value ? { in: [platform.value] } : undefined,
   };
 
   if (props.entityType === 'member') {
-    filterToApply.memberId = props.entity.id;
+    filterToApply.memberId = { in: [props.entity.id] };
   } else {
-    filterToApply[`${props.entityType}s`] = [props.entity.id];
+    filterToApply.organizationId = { in: [props.entity.id] };
   }
 
   if (props.entity.id) {
     if (query.value && query.value !== '') {
       filterToApply.or = [
         {
-          body: {
-            textContains: query.value,
-          },
-        },
-        {
           channel: {
-            textContains: query.value,
-          },
-        },
-        {
-          url: {
-            textContains: query.value,
-          },
-        },
-        {
-          body: {
-            textContains: query.value,
-          },
-        },
-        {
-          title: {
             textContains: query.value,
           },
         },
@@ -389,25 +384,13 @@ const fetchActivities = async ({ reset } = { reset: false }) => {
 
   loading.value = true;
 
-  const sampleTenant = AuthCurrentTenant.getSampleTenantData();
-  const tenantId = sampleTenant?.id
-    || store.getters['auth/currentTenant'].id;
-
-  const { data } = await authAxios.post(
-    `/tenant/${tenantId}/activity/query`,
-    {
-      filter: filterToApply,
-      orderBy: 'timestamp_DESC',
-      limit: limit.value,
-      offset: offset.value,
-      segments: selectedSegment.value ? [selectedSegment.value] : segments.value.map((s) => s.id),
-    },
-    {
-      headers: {
-        Authorization: sampleTenant?.token,
-      },
-    },
-  );
+  const data = await ActivityService.query({
+    filter: filterToApply,
+    orderBy: 'timestamp_DESC',
+    limit: limit.value,
+    offset: offset.value,
+    segments: selectedSegment.value ? [selectedSegment.value] : segments.value.map((s) => s.id),
+  });
 
   filter = { ...filterToApply };
   loading.value = false;

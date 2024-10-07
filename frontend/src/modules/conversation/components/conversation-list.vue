@@ -1,6 +1,6 @@
 <template>
   <div class="pt-3">
-    <cr-filter
+    <lf-filter
       v-model="filters"
       :config="conversationFilters"
       :search-config="conversationSearchFilter"
@@ -9,10 +9,17 @@
     />
     <div
       v-if="loading && !conversations.length"
-      class="h-16 !relative !min-h-5 flex justify-center items-center"
+      class="flex flex-col items-center mt-10"
     >
-      <div class="animate-spin w-fit">
-        <div class="custom-spinner" />
+      <div
+        class="h-16 !relative !min-h-5 flex justify-center items-center"
+      >
+        <div class="animate-spin w-fit">
+          <div class="custom-spinner" />
+        </div>
+      </div>
+      <div class="text-gray-500 italic text-xs">
+        This might take up to 10 seconds for a large project group
       </div>
     </div>
     <div v-else>
@@ -32,9 +39,9 @@
             :total="totalConversations"
             :current-page="pagination.page"
             :has-page-counter="false"
+            :sorter="false"
             module="conversation"
             position="top"
-            @change-sorter="doChangeFilter"
           />
         </div>
 
@@ -44,6 +51,7 @@
           :key="conversation?.id"
           :conversation="conversation"
           @details="conversationId = conversation.id"
+          @reload="reload()"
         />
 
         <!-- Load more button -->
@@ -66,11 +74,12 @@
 import { computed, ref } from 'vue';
 import AppConversationItem from '@/modules/conversation/components/conversation-item.vue';
 import AppConversationDrawer from '@/modules/conversation/components/conversation-drawer.vue';
-import CrFilter from '@/shared/modules/filters/components/Filter.vue';
+import LfFilter from '@/shared/modules/filters/components/Filter.vue';
 import { useConversationStore } from '@/modules/conversation/store';
 import { storeToRefs } from 'pinia';
 import { conversationFilters, conversationSearchFilter } from '@/modules/conversation/config/filters/main';
 import AppLoadMore from '@/shared/button/load-more.vue';
+import moment from 'moment/moment';
 
 const conversationId = ref(null);
 
@@ -89,22 +98,27 @@ const { fetchConversation } = conversationStore;
 
 const loading = ref(false);
 
-const sorterFilter = computed(() => (filters.value.order.prop === 'activityCount'
-  ? 'trending'
-  : 'recentActivity'));
+filters.value = {
+  search: '',
+  relation: 'and',
+  order: {
+    prop: 'lastActive',
+    order: 'descending',
+  },
+  lastActivityDate: {
+    operator: 'gt',
+    value: moment().subtract(7, 'day').format('YYYY-MM-DD'),
+    include: true,
+  },
+};
+
+const sorterFilter = ref('recentActivity');
 
 const emptyState = computed(() => ({
   title: 'No conversations found',
   description:
         "We couldn't find any results that match your search criteria, please try a different query",
 }));
-
-const doChangeFilter = (filter) => {
-  filters.value.order = {
-    prop: filter === 'recentActivity' ? 'lastActive' : 'activityCount',
-    order: 'descending',
-  };
-};
 
 const isLoadMoreVisible = computed(() => (
   pagination.value.page
@@ -120,6 +134,17 @@ const onLoadMore = () => {
     offset: (pagination.value.page - 1) * pagination.value.perPage,
     limit: pagination.value.perPage,
     append: true,
+  });
+};
+
+const reload = () => {
+  pagination.value.page = 1;
+
+  fetch({
+    ...savedFilterBody.value,
+    offset: (pagination.value.page - 1) * pagination.value.perPage,
+    limit: pagination.value.perPage,
+    append: false,
   });
 };
 

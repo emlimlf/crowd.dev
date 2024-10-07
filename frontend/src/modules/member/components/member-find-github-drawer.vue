@@ -50,8 +50,8 @@
       <div v-else-if="!loading">
         <app-empty-state-cta
           icon="ri-contacts-line"
-          title="We could not find any GitHub identities for this contact."
-          description="There are no GitHub users that match the identities in this contact. We recommend Googling them instead."
+          title="We could not find any GitHub identities for this person."
+          description="There are no GitHub users that match the identities in this person. We recommend Googling them instead."
           secondary-btn="Search on Google"
           @secondary-click="searchContactOnGoogle"
         />
@@ -183,7 +183,7 @@ export default {
 }
 
 .selected {
-  @apply bg-brand-50 border-brand-400 hover:bg-brand-50 hover:border-brand-400
+  @apply bg-primary-50 border-primary-400 hover:bg-primary-50 hover:border-primary-400
 }
 
 </style>

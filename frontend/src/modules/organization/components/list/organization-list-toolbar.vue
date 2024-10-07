@@ -21,32 +21,37 @@
           Export to CSV
         </el-dropdown-item>
 
-        <el-dropdown-item
-          v-if="selectedOrganizations.length === 2"
-          :command="{
-            action: 'mergeOrganizations',
-          }"
-          :disabled="
-            isPermissionReadOnly
-              || isEditLockedForSampleData
-          "
+        <el-tooltip
+          v-if="selectedOrganizations.length === 2 && hasPermission(LfPermission.mergeOrganizations)"
+          content="Active member organizations of the Linux Foundation can't be merged into other organizations."
+          :disabled="!(!!selectedOrganizations?.[0]?.lfxMembership && !!selectedOrganizations?.[1]?.lfxMembership)"
+          placement="top"
         >
-          <i
-            class="ri-lg mr-1 ri-shuffle-line"
-          />
-          Merge organizations
-        </el-dropdown-item>
+          <span>
+            <el-dropdown-item
+              :command="{
+                action: 'mergeOrganizations',
+              }"
+              :disabled="
+                (!!selectedOrganizations?.[0]?.lfxMembership && !!selectedOrganizations?.[1]?.lfxMembership)
+                  || !hasPermission(LfPermission.organizationEdit)
+                  || !hasPermission(LfPermission.mergeOrganizations)
+              "
+            >
+              <i
+                class="ri-lg mr-1 ri-shuffle-line"
+              />
+              Merge organizations
+            </el-dropdown-item>
+          </span>
+        </el-tooltip>
 
         <el-dropdown-item
-          v-if="markAsTeamOrganizationOptions"
+          v-if="markAsTeamOrganizationOptions && hasPermission(LfPermission.organizationEdit)"
           :command="{
             action: 'markAsTeamOrganization',
             value: markAsTeamOrganizationOptions.value,
           }"
-          :disabled="
-            isPermissionReadOnly
-              || isEditLockedForSampleData
-          "
         >
           <i
             class="ri-lg mr-1"
@@ -55,58 +60,56 @@
           {{ markAsTeamOrganizationOptions.copy }}
         </el-dropdown-item>
 
-        <hr class="border-gray-200 my-1 mx-2" />
+        <template v-if="hasPermission(LfPermission.organizationDestroy)">
+          <hr class="border-gray-200 my-1 mx-2" />
 
-        <el-dropdown-item
-          :command="{ action: 'destroyAll' }"
-          :disabled="
-            isPermissionReadOnly
-              || isDeleteLockedForSampleData
-          "
-        >
-          <div
-            class="flex items-center"
-            :class="{
-              'text-red-500': !isDeleteLockedForSampleData,
-            }"
+          <el-dropdown-item
+            :command="{ action: 'destroyAll' }"
+            :disabled="!hasPermission(LfPermission.organizationDestroy)"
           >
-            <i class="ri-lg ri-delete-bin-line mr-2" />
-            <span>Delete organizations</span>
-          </div>
-        </el-dropdown-item>
+            <div
+              class="flex items-center text-red-500"
+            >
+              <i class="ri-lg ri-delete-bin-line mr-2" />
+              <span>Delete organizations</span>
+            </div>
+          </el-dropdown-item>
+        </template>
       </template>
     </el-dropdown>
   </div>
+  <app-organization-merge-dialog v-model="isMergeDialogOpen" :to-merge="organizationToMerge" />
 </template>
 
 <script setup>
 import pluralize from 'pluralize';
-import { computed } from 'vue';
-import {
-  mapGetters,
-} from '@/shared/vuex/vuex.helpers';
+import { ref, computed } from 'vue';
 import ConfirmDialog from '@/shared/dialog/confirm-dialog';
 import Message from '@/shared/message/message';
 import { useOrganizationStore } from '@/modules/organization/store/pinia';
 import { storeToRefs } from 'pinia';
-import Errors from '@/shared/error/errors';
-import { Excel } from '@/shared/excel/excel';
 import { DEFAULT_ORGANIZATION_FILTERS } from '@/modules/organization/store/constants';
 import useOrganizationMergeMessage from '@/shared/modules/merge/config/useOrganizationMergeMessage';
-import { OrganizationPermissions } from '../../organization-permissions';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import { useLfSegmentsStore } from '@/modules/lf/segments/store';
+import { getExportMax } from '@/modules/member/member-export-limit';
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
+import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
+import { useRoute } from 'vue-router';
+import AppOrganizationMergeDialog from '@/modules/organization/components/organization-merge-dialog.vue';
 import { OrganizationService } from '../../organization-service';
 
-const props = defineProps({
-  pagination: {
-    type: Object,
-    default: () => ({
-      page: 1,
-      perPage: 20,
-    }),
-  },
-});
+const { trackEvent } = useProductTracking();
 
-const { currentUser, currentTenant } = mapGetters('auth');
+const route = useRoute();
+
+const authStore = useAuthStore();
+const { tenant } = storeToRefs(authStore);
+
+const lsSegmentsStore = useLfSegmentsStore();
+const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
 
 const organizationStore = useOrganizationStore();
 const {
@@ -115,25 +118,10 @@ const {
 } = storeToRefs(organizationStore);
 const { fetchOrganizations } = organizationStore;
 
-const isPermissionReadOnly = computed(
-  () => new OrganizationPermissions(
-    currentTenant.value,
-    currentUser.value,
-  ).edit === false,
-);
+const { hasPermission } = usePermissions();
 
-const isEditLockedForSampleData = computed(
-  () => new OrganizationPermissions(
-    currentTenant.value,
-    currentUser.value,
-  ).editLockedForSampleData,
-);
-const isDeleteLockedForSampleData = computed(
-  () => new OrganizationPermissions(
-    currentTenant.value,
-    currentUser.value,
-  ).destroyLockedForSampleData,
-);
+const isMergeDialogOpen = ref(null);
+const organizationToMerge = ref(null);
 
 const markAsTeamOrganizationOptions = computed(() => {
   const isTeamView = filters.value.settings.teamOrganization === 'filter';
@@ -168,6 +156,15 @@ const handleDoDestroyAllWithConfirm = () => ConfirmDialog({
   icon: 'ri-delete-bin-line',
 })
   .then(() => {
+    trackEvent({
+      key: FeatureEventKey.DELETE_ORGANIZATION,
+      type: EventType.FEATURE,
+      properties: {
+        path: route.path,
+        bulk: true,
+      },
+    });
+
     const ids = selectedOrganizations.value.map((m) => m.id);
     return OrganizationService.destroyAll(ids);
   })
@@ -178,65 +175,63 @@ const handleMergeOrganizations = async () => {
 
   const { loadingMessage, apiErrorMessage } = useOrganizationMergeMessage;
 
-  OrganizationService.mergeOrganizations(firstOrganization.id, secondOrganization.id)
-    .then(() => {
-      organizationStore
-        .addMergedOrganizations(firstOrganization.id, secondOrganization.id);
+  const isLfMemberOrganization = !!firstOrganization.lfxMembership || !!secondOrganization.lfxMembership;
 
-      loadingMessage();
-
-      fetchOrganizations({ reload: true });
-    })
-    .catch((error) => {
-      apiErrorMessage({ error });
-    });
+  isMergeDialogOpen.value = firstOrganization;
+  organizationToMerge.value = secondOrganization;
 };
 
 const handleDoExport = async () => {
-  try {
-    const filter = {
-      and: [
-        ...DEFAULT_ORGANIZATION_FILTERS,
-        {
-          id: {
-            in: selectedOrganizations.value.map((o) => o.id),
-          },
+  const filter = {
+    and: [
+      ...DEFAULT_ORGANIZATION_FILTERS,
+      {
+        id: {
+          in: selectedOrganizations.value.map((o) => o.id),
         },
-      ],
-    };
+      },
+    ],
+  };
 
-    const response = await OrganizationService.query({
-      filter,
-      orderBy: `${filters.value.order.prop}_${filters.value.order.order === 'descending' ? 'DESC' : 'ASC'}`,
-      offset: (props.pagination.page - 1) * props.pagination.perPage || 0,
-      limit: props.pagination.perPage || 20,
-    });
-
-    Excel.exportAsExcelFile(
-      response.rows.map((o) => ({
-        Id: o.id,
-        Name: o.name,
-        Description: o.description,
-        Headline: o.headline,
-        Website: o.website,
-        '# of contributors': o.memberCount,
-        '# of activities': o.activityCount,
-        Location: o.location,
-        Created: o.createdAt,
-        Updated: o.updatedAt,
-      })),
-      ['Id', 'Name', 'Description',
-        'Headline', 'Headline', '# of contributors',
-        '# of activities', 'Location', 'Created', 'Updated',
-      ],
-      `organizations_${new Date().getTime()}`,
+  try {
+    const tenantCsvExportCount = tenant.value.csvExportCount;
+    const planExportCountMax = getExportMax(
+      tenant.value.plan,
     );
 
-    Message.success('Organizations exported successfully');
+    await showExportDialog({
+      tenantCsvExportCount,
+      planExportCountMax,
+      badgeContent: pluralize('organization', selectedOrganizations.value.length, true),
+    });
+
+    trackEvent({
+      key: FeatureEventKey.EXPORT_ORGANIZATIONS,
+      type: EventType.FEATURE,
+      properties: {
+        path: route.path,
+        bulk: true,
+      },
+    });
+
+    await OrganizationService.export({
+      filter,
+      limit: selectedOrganizations.value.length,
+      offset: null,
+      segments: [selectedProjectGroup.value?.id],
+    });
+
+    await doRefreshCurrentUser(null);
+
+    Message.success(
+      'CSV download link will be sent to your e-mail',
+    );
   } catch (error) {
-    Errors.handle(error);
     Message.error(
-      'There was an error exporting organizations',
+      'An error has occured while trying to export the CSV file. Please try again',
+      {
+        title: 'CSV Export failed',
+      },
     );
   }
 };
@@ -249,6 +244,15 @@ const handleCommand = async (command) => {
   } else if (command.action === 'mergeOrganizations') {
     await handleMergeOrganizations();
   } else if (command.action === 'markAsTeamOrganization') {
+    trackEvent({
+      key: FeatureEventKey.MARK_AS_TEAM_ORGANIZATION,
+      type: EventType.FEATURE,
+      properties: {
+        path: route.path,
+        bulk: true,
+      },
+    });
+
     Message.info(
       null,
       {

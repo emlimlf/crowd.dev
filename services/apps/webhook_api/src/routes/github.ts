@@ -1,5 +1,5 @@
 import { asyncWrap } from '../middleware/error'
-import { WebhooksRepository } from '../repos/webhooks.repo'
+import { WebhooksRepository } from '@crowd/data-access-layer/src/old/apps/webhook_api/webhooks.repo'
 import { Error400BadRequest } from '@crowd/common'
 import { PlatformType, WebhookType } from '@crowd/types'
 import express from 'express'
@@ -26,8 +26,26 @@ export const installGithubRoutes = async (app: express.Express) => {
         throw new Error400BadRequest('Missing installation id!')
       }
       const identifier = data.installation.id.toString()
-      // load integration from database to verify that it exists
       const repo = new WebhooksRepository(req.dbStore, req.log)
+
+      if (event === 'installation' && data.action === 'created') {
+        await repo.addGithubInstallation(
+          identifier,
+          data.installation.account.type,
+          data.installation.account.login,
+          data.installation.account.avatar_url,
+          data.repositories.length,
+        )
+        res.sendStatus(204)
+        return
+      }
+      if (event === 'installation' && data.action === 'deleted') {
+        await repo.deleteGithubInstallation(identifier)
+        res.sendStatus(204)
+        return
+      }
+
+      // load integration from database to verify that it exists
       const integration = await repo.findIntegrationByIdentifier(PlatformType.GITHUB, identifier)
 
       if (integration) {

@@ -24,7 +24,7 @@
       </div>
     </div>
     <el-tooltip
-      v-if="sourceId"
+      v-if="sourceId && displaySourceId"
       :content="sourceId"
       placement="top"
     >
@@ -57,12 +57,16 @@ const props = defineProps({
     default: null,
   },
   sourceId: {
-    type: Number,
+    type: String,
     default: null,
   },
   display: {
     type: String,
     default: 'item',
+  },
+  displaySourceId: {
+    type: Boolean,
+    default: false,
   },
 });
 

@@ -1,19 +1,13 @@
 import {
-  getRemainingTenantCredits,
-  incrementTenantCredits,
-  getTenantOrganizationsForEnrichment,
-  tryEnrichOrganization,
-  getApplicableTenants,
-  hasTenantOrganizationEnrichmentEnabled,
   syncToOpensearch,
-} from './activities/organizationEnrichment'
+  getOrganizationsToEnrich,
+  tryEnrichOrganization,
+  getMaxEnrichedOrganizationsPerExecution,
+} from './activities/enrichment'
 
 export {
-  getApplicableTenants,
-  getRemainingTenantCredits,
-  incrementTenantCredits,
-  getTenantOrganizationsForEnrichment,
-  tryEnrichOrganization,
-  hasTenantOrganizationEnrichmentEnabled,
   syncToOpensearch,
+  getOrganizationsToEnrich,
+  tryEnrichOrganization,
+  getMaxEnrichedOrganizationsPerExecution,
 }

@@ -1,7 +1,5 @@
 export default {
   image: '/images/integrations/facebook.png',
+  name: 'Facebook',
   hideAsIntegration: true,
-  organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
-  },
 };

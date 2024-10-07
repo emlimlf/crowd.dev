@@ -1,4 +1,6 @@
 import { Organization } from '@/modules/organization/types/Organization';
+import { Platform } from '@/shared/modules/platform/types/Platform';
+import { ContributorMaintainerRole } from '@/modules/contributor/types/Contributor';
 
 export interface MemberAttribute {
   default: string;
@@ -29,19 +31,27 @@ export interface MemberTag {
   name: string;
 }
 
+export interface MemberIdentity {
+  platform: Platform;
+  type: string;
+  value: string;
+  verified: boolean;
+  sourceId: string | null;
+}
+
 export interface Member {
   activeDaysCount: string;
   activeOn: string[] | null;
   activityCount: string;
   activityTypes:string[] | null;
   attributes: Record<string, MemberAttribute>
-  averageSentiment: string | null;
+  averageSentiment: number | null;
   contributions: MemberContribution[]
   createdAt: string;
   displayName: string;
   emails: string[]
   id: string;
-  identities: string[] | null;
+  identities: MemberIdentity[] | null;
   importHash: string | null;
   joinedAt: string;
   lastActive: string | null;
@@ -56,8 +66,11 @@ export interface Member {
   toMergeIds: string[] | null;
   updatedAt: string;
   username: Record<string, string[]>
+  verifiedEmails: string[];
+  unverifiedEmails: string[];
   segments: {
     id: string;
     name: string;
-  }[]
+  }[],
+  maintainerRoles: ContributorMaintainerRole[];
 }

@@ -1,3 +1,4 @@
+import { v4 as uuid } from 'uuid'
 import { getServiceLogger } from '@crowd/logging'
 import { getRedisClient } from '@crowd/redis'
 import { getTemporalClient } from '@crowd/temporal'
@@ -5,7 +6,9 @@ import { SegmentStatus, TenantPlans } from '@crowd/types'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import moment from 'moment'
-import { API_CONFIG, REDIS_CONFIG, TEMPORAL_CONFIG } from '../../conf'
+import { getClientSQL } from '@crowd/questdb'
+import { getDbConnection } from '@crowd/data-access-layer/src/database'
+import { API_CONFIG, PRODUCT_DB_CONFIG, REDIS_CONFIG, TEMPORAL_CONFIG } from '../../conf'
 import Roles from '../../security/roles'
 import { IServiceOptions } from '../../services/IServiceOptions'
 import { databaseInit } from '../databaseConnection'
@@ -21,8 +24,6 @@ export default class SequelizeTestUtils {
     db = await this.getDatabase(db)
 
     const tables = [
-      '"organizationCacheIdentities"',
-      '"organizationCacheLinks"',
       '"organizationIdentities"',
       '"activityTasks"',
       '"automationExecutions"',
@@ -45,8 +46,6 @@ export default class SequelizeTestUtils {
       '"eagleEyeActions"',
       '"tasks"',
       '"tags"',
-      '"reports"',
-      '"widgets"',
 
       '"memberAttributeSettings"',
       '"memberEnrichmentCache"',
@@ -65,7 +64,6 @@ export default class SequelizeTestUtils {
       '"incomingWebhooks"',
       '"githubRepos"',
 
-      '"organizationCaches"',
       '"organizationsSyncRemote"',
       '"organizationSegments"',
       '"organizationToMerge"',
@@ -86,13 +84,6 @@ export default class SequelizeTestUtils {
       logger.error(e)
       throw e
     }
-  }
-
-  static async refreshMaterializedViews(db) {
-    db = await this.getDatabase(db)
-    await db.sequelize.query(
-      'refresh materialized view concurrently "memberActivityAggregatesMVs";',
-    )
   }
 
   static async getDatabase(db?) {
@@ -166,6 +157,7 @@ export default class SequelizeTestUtils {
     const redis = await getRedisClient(REDIS_CONFIG, true)
 
     return {
+      requestId: uuid(),
       language: 'en',
       currentUser: user,
       currentTenant: tenant,
@@ -174,10 +166,11 @@ export default class SequelizeTestUtils {
       log,
       redis,
       temporal: await getTemporalClient(TEMPORAL_CONFIG),
+      productDb: await getDbConnection(PRODUCT_DB_CONFIG),
     } as IServiceOptions
   }
 
-  static async getTestIRepositoryOptions(db) {
+  static async getTestIRepositoryOptions(db): Promise<IRepositoryOptions> {
     db = await this.getDatabase(db)
 
     const randomTenant = this.getRandomTestTenant()
@@ -222,17 +215,21 @@ export default class SequelizeTestUtils {
 
     const log = getServiceLogger()
     const redis = await getRedisClient(REDIS_CONFIG, true)
+    const qdb = await getClientSQL()
 
     return {
+      requestId: uuid(),
       language: 'en',
       currentUser: user,
       currentTenant: tenant,
       currentSegments: [segment],
       database: db,
+      qdb,
       bypassPermissionValidation: true,
       log,
       redis,
       temporal: await getTemporalClient(TEMPORAL_CONFIG),
+      productDb: await getDbConnection(PRODUCT_DB_CONFIG),
     } as IRepositoryOptions
   }
 

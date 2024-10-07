@@ -1,7 +1,4 @@
-export interface ITenant {
-  tenantId: string
-  plan: string
-}
+import { IMemberOpensearch, IOrganizationOpensearch } from '@crowd/types'
 
 interface ITermFilter {
   term: {
@@ -9,9 +6,23 @@ interface ITermFilter {
   }
 }
 
+interface IExistsFilter {
+  exists: {
+    field: string
+  }
+}
+
 interface IRangeFilterMemberId {
   range: {
     uuid_memberId: {
+      gt: string
+    }
+  }
+}
+
+interface IRangeFilterOrganizationId {
+  range: {
+    uuid_organizationId: {
       gt: string
     }
   }
@@ -26,6 +37,11 @@ interface IRangeFilterCreatedAt {
 }
 
 export type IMemberFilter = ITermFilter | IRangeFilterMemberId | IRangeFilterCreatedAt
+export type IOrganizationFilter =
+  | ITermFilter
+  | IRangeFilterOrganizationId
+  | IRangeFilterCreatedAt
+  | IExistsFilter
 
 export interface IMemberQueryBody {
   from: number
@@ -44,46 +60,90 @@ export interface IMemberQueryBody {
   _source: string[]
 }
 
-export interface IMemberIdentityOpensearch {
-  string_platform: string
-  string_username: string
+export interface IOrganizationQueryBody {
+  from: number
+  size: number
+  query: {
+    bool: {
+      filter: IOrganizationFilter[]
+    }
+  }
+  sort: {
+    [key: string]: string
+  }
+  collapse: {
+    field: string
+  }
+  _source: string[]
 }
 
-export interface IMemberPartialAggregatesOpensearch {
-  uuid_memberId: string
-  nested_identities: IMemberIdentityOpensearch[]
-  uuid_arr_noMergeIds: string[]
-  keyword_displayName: string
-  string_arr_emails: string[]
-  int_activityCount: number
+export interface ILLMResult {
+  body: ILLMBody
+  prompt: string
+  responseTimeSeconds: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  modelSpecificArgs: any
 }
 
-export interface IMemberPartialAggregatesOpensearchRawResult {
-  _source: IMemberPartialAggregatesOpensearch
-}
-
-export interface ISimilarMember {
-  uuid_memberId: string
-  nested_identities: IMemberIdentityOpensearch[]
-  nested_weakIdentities: IMemberIdentityOpensearch[]
-  keyword_displayName: string
-  string_arr_emails: string[]
-  int_activityCount: number
-}
-
-export interface ISimilarMemberOpensearch {
-  _source: ISimilarMember
-}
-
-export interface IMemberNoMerge {
-  memberId: string
-  noMergeId: string
-}
-
-export interface IMemberMergeSuggestionsLatestGeneratedAt {
-  memberMergeSuggestionsLastGeneratedAt: string
-}
-
-export interface IMemberId {
+export interface ILLMBody {
   id: string
+  type: string
+  role: string
+  model: string
+  content: {
+    type: string
+    text: string
+  }[]
+  stop_reason: string
+  stop_sequence: string
+  usage: {
+    input_tokens: number
+    output_tokens: number
+  }
+}
+
+export interface IProcessGenerateMemberMergeSuggestionsArgs {
+  tenantId: string
+  lastUuid?: string
+}
+
+export interface IProcessGenerateOrganizationMergeSuggestionsArgs {
+  tenantId: string
+  lastUuid?: string
+  organizationIds?: string[]
+}
+
+export interface IProcessCheckSimilarityWithLLM {
+  prompt: string
+  modelId: string
+  memberCouples?: string[][]
+  organizationCouples?: string[][]
+  region: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  modelSpecificArgs: any
+}
+
+export interface ISimilarityFilter {
+  lte: number
+  gte: number
+}
+
+export interface IProcessMergeOrganizationSuggestionsWithLLM {
+  onlyLFXMembers?: boolean
+  organizationIds?: string[]
+  similarity: ISimilarityFilter
+  tenantId: string
+}
+
+export interface IProcessMergeMemberSuggestionsWithLLM {
+  similarity: ISimilarityFilter
+  tenantId: string
+}
+
+export interface ISimilarMemberOpensearchResult {
+  _source: IMemberOpensearch
+}
+
+export interface ISimilarOrganizationOpensearchResult {
+  _source: IOrganizationOpensearch
 }

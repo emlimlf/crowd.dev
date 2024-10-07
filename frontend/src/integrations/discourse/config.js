@@ -13,11 +13,9 @@ export default {
   },
   image: '/images/integrations/discourse.png',
   connectComponent: DiscourseConnect,
+  urlPrefix: 'https://meta.discourse.org/u/',
   activityDisplay: {
     showLinkToUrl: true,
   },
   url: ({ attributes }) => attributes?.url?.discourse,
-  organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
-  },
 };

@@ -7,16 +7,20 @@
     />
     <div v-else-if="organization">
       <div class="flex items-center justify-between">
-        <router-link
-          class="text-gray-600 btn-link--md btn-link--secondary p-0 inline-flex items-center"
-          :to="{
+        <app-back-link
+          :default-route="{
             path: '/organizations',
             query: { projectGroup: selectedProjectGroup?.id },
           }"
         >
-          <i class="ri-arrow-left-s-line mr-2" />Organizations
-        </router-link>
-        <app-organization-actions :organization="organization" />
+          <template #default>
+            Organizations
+          </template>
+        </app-back-link>
+        <app-organization-actions
+          :organization="organization"
+          @unmerge="unmerge"
+        />
       </div>
 
       <div class="grid grid-cols-3 gap-6 mt-4">
@@ -27,17 +31,18 @@
         <div class="row-span-4">
           <app-organization-view-aside
             :organization="organization"
+            @unmerge="unmerge"
           />
         </div>
         <div class="panel w-full col-span-2">
           <el-tabs v-model="tab">
             <el-tab-pane
-              label="Current contributors"
+              label="Current people"
               name="members"
             >
               <template #label>
                 <span class="flex gap-2">
-                  <span>Current contributors</span>
+                  <span>Current people</span>
                   <el-tooltip
                     content="Members that are currently a part of this organization."
                     placement="top"
@@ -70,11 +75,16 @@
       </div>
     </div>
   </app-page-wrapper>
+  <app-organization-unmerge-dialog
+    v-if="isUnmergeDialogOpen"
+    v-model="isUnmergeDialogOpen"
+    :selected-identity="selectedIdentity"
+    @update:model-value="selectedIdentity = null"
+  />
 </template>
 
 <script setup>
 import { onMounted, ref, watch } from 'vue';
-
 import AppActivityTimeline from '@/modules/activity/components/activity-timeline.vue';
 import AppOrganizationViewHeader from '@/modules/organization/components/view/organization-view-header.vue';
 import AppOrganizationViewAside from '@/modules/organization/components/view/organization-view-aside.vue';
@@ -85,6 +95,8 @@ import { useLfSegmentsStore } from '@/modules/lf/segments/store';
 import { useOrganizationStore } from '@/modules/organization/store/pinia';
 import { useRoute } from 'vue-router';
 import AppOrganizationActions from '@/modules/organization/components/organization-actions.vue';
+import AppBackLink from '@/shared/modules/back-link/components/back-link.vue';
+import AppOrganizationUnmergeDialog from '@/modules/organization/components/organization-unmerge-dialog.vue';
 
 const props = defineProps({
   id: {
@@ -117,6 +129,16 @@ watch(() => props.id, (id) => {
 }, {
   immediate: true,
 });
+
+// Unmerge
+const isUnmergeDialogOpen = ref(null);
+const selectedIdentity = ref(null);
+const unmerge = (identity) => {
+  if (identity) {
+    selectedIdentity.value = identity;
+  }
+  isUnmergeDialogOpen.value = organization.value;
+};
 
 onMounted(() => {
   const segments = route.query.segmentId ? [route.query.segmentId] : [route.query.projectGroup];

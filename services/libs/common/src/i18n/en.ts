@@ -53,11 +53,6 @@ const en = {
     },
   },
 
-  cubejs: {
-    invalidToken: `JWT token can't be verified`,
-    tenantIdNotMatching: `Tenant id in url params and given jwt token don't match`,
-  },
-
   user: {
     errors: {
       userAlreadyExists: 'This email is already in use.',
@@ -152,10 +147,6 @@ const en = {
     featureFlag: {
       notEnabled: 'This feature is not enabled for your account',
     },
-    reports: {
-      templateReportsCreateNotAllowed: `Template reports can't be created.`,
-      templateReportsUpdateNotAllowed: `Custom reports can't be updated to template reports.`,
-    },
     noNangoToken: {
       message: 'No Nango token found!',
     },
@@ -177,6 +168,7 @@ const en = {
     git: {
       noIntegration: 'The Git integration is not configured.',
     },
+    alreadyExists: '{0}',
   },
 
   email: {

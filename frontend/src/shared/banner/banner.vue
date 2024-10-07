@@ -33,14 +33,14 @@ export default {
 
 <style lang="scss">
 .banner {
-  @apply absolute h-14 inset-x-0 bg-gray-600 top-0 z-10 flex items-center px-6 text-white border-b;
+  @apply absolute h-10 inset-x-3 bg-gray-600 top-3 z-10 flex items-center px-6 text-white border-b rounded-lg;
 
   &--alert {
     @apply border-yellow-100 bg-yellow-50 text-black;
   }
 
   &--info {
-    @apply border-blue-100 bg-blue-100 text-black;
+    @apply border-primary-100 bg-primary-100 text-black;
   }
 
   &-icon {

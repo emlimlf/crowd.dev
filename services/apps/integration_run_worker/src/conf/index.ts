@@ -1,9 +1,9 @@
 import { SERVICE } from '@crowd/common'
-import { IDatabaseConfig } from '@crowd/database'
+import { IDatabaseConfig } from '@crowd/data-access-layer/src/database'
 import { IUnleashConfig } from '@crowd/feature-flags'
 import { ISearchSyncApiConfig } from '@crowd/opensearch'
+import { IQueueClientConfig } from '@crowd/queue'
 import { IRedisConfiguration } from '@crowd/redis'
-import { ISqsClientConfig } from '@crowd/sqs'
 import { QueuePriorityLevel } from '@crowd/types'
 import config from 'config'
 
@@ -15,13 +15,17 @@ export interface INangoConfig {
 export interface ISlackAlertingConfig {
   url: string
 }
+export interface ILokiDbConfig {
+  url: string
+  token: string
+}
 
-let sqsConfig: ISqsClientConfig
-export const SQS_CONFIG = (): ISqsClientConfig => {
-  if (sqsConfig) return sqsConfig
+let queueConfig: IQueueClientConfig
+export const QUEUE_CONFIG = (): IQueueClientConfig => {
+  if (queueConfig) return queueConfig
 
-  sqsConfig = config.get<ISqsClientConfig>('sqs')
-  return sqsConfig
+  queueConfig = config.get<IQueueClientConfig>('queue')
+  return queueConfig
 }
 
 let dbConfig: IDatabaseConfig
@@ -102,4 +106,12 @@ export const UNLEASH_CONFIG = (): IUnleashConfig | undefined => {
   unleashConfig = Object.assign({ appName: SERVICE }, config.get<IUnleashConfig>('unleash'))
 
   return unleashConfig
+}
+
+let lokiDbConfig: ILokiDbConfig
+export const LOKI_DB_CONFIG = (): ILokiDbConfig => {
+  if (lokiDbConfig) return lokiDbConfig
+
+  lokiDbConfig = config.get<ILokiDbConfig>('loki')
+  return lokiDbConfig
 }

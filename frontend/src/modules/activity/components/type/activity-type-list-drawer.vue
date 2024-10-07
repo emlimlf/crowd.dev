@@ -47,7 +47,8 @@
             </div>
           </div>
           <p
-            class="text-sm leading-5 font-medium text-brand-500 cursor-pointer"
+            v-if="hasPermission(LfPermission.activityEdit)"
+            class="text-sm leading-5 font-medium text-primary-500 cursor-pointer"
             @click="isFormModalOpen = true"
           >
             + Add activity type
@@ -102,7 +103,7 @@
     v-model="isFormModalOpen"
     :type="editableActivityType"
     :subproject-id="subprojectId"
-    @on-update="getTypes(subprojectId)"
+    @on-update="fetchActivityTypes(subprojectId)"
     @update:model-value="onModalViewChange($event)"
   />
 </template>
@@ -124,6 +125,8 @@ import {
 } from '@/shared/vuex/vuex.helpers';
 import { useActivityTypeStore } from '@/modules/activity/store/type';
 import { CrowdIntegrations } from '@/integrations/integrations-config';
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
+import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
 
 // Props & emits
 const props = defineProps({
@@ -138,13 +141,14 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue']);
+const { hasPermission } = usePermissions();
 
 // Store
 const store = useStore();
 const { doFetch } = mapActions('integration');
 const activityTypeStore = useActivityTypeStore();
 const { types } = storeToRefs(activityTypeStore);
-
+const { fetchActivityTypes } = activityTypeStore;
 // Drawer open
 const isFormModalOpen = ref(false);
 const editableActivityType = ref(null);

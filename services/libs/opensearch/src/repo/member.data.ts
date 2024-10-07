@@ -1,6 +1,13 @@
+import { IMemberSegmentAggregates } from '@crowd/data-access-layer/src/members/types'
+import { MemberIdentityType } from '@crowd/types'
+
 export interface IDbMemberIdentityData {
   platform: string
-  username: string
+  value: string
+  type: MemberIdentityType
+  verified: boolean
+  sourceId: string | null
+  integrationId: string | null
 }
 
 export interface IDbMemberTagData {
@@ -60,10 +67,9 @@ export interface IDbMemberContributionData {
 export interface IDbMemberSyncData {
   id: string
   tenantId: string
-  segmentId: string
+  grandParentSegment: boolean
   displayName: string | null
   attributes: unknown | null
-  emails: string[] | null
   score: number | null
   lastEnriched: string | null
   joinedAt: string
@@ -72,18 +78,9 @@ export interface IDbMemberSyncData {
   reach: unknown | null
   numberOfOpenSourceContributions: number
 
-  // member activity data
-  activeOn: string[]
-  activityCount: number
-  activityTypes: string[]
-  activeDaysCount: number
-  lastActive: string
-  averageSentiment: number | null
-
   contributions: IDbMemberContributionData[]
   affiliations: IDbMemberAffiliationData[]
   identities: IDbMemberIdentityData[]
-  weakIdentities: IDbMemberIdentityData[]
   organizations: IDbMemberOrganization[]
   tags: IDbMemberTagData[]
   toMergeIds: string[]
@@ -96,8 +93,14 @@ export interface IMemberSegmentMatrixItem {
   segmentId: string
   processed: boolean
   data: IDbMemberSyncData
+  aggregates: IMemberSegmentAggregates
 }
 
 export interface IMemberSegmentMatrix {
   [key: string]: IMemberSegmentMatrixItem[]
+}
+
+export interface IMemberIdData {
+  memberId: string
+  manuallyCreated: boolean
 }

@@ -1,0 +1,10 @@
+:root {
+  /* ---------------------------------- *\
+          Card style
+  \* ---------------------------------- */
+
+  --lf-card-shadow: var(--shadow-s);
+  --lf-card-radius: #{rem(8)};
+  --lf-card-background: var(--lf-color-white);
+  --lf-card-border: #{rem(1)} solid var(--lf-color-gray-200);
+}

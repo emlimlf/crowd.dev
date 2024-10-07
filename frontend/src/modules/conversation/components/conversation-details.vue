@@ -86,9 +86,9 @@
           {{ conversation.title }}
         </div>
         <button
+          v-if="hasPermission(LfPermission.conversationEdit)"
           class="btn btn-link btn-link--primary w-8 !h-8 flex-shrink-0"
           type="button"
-          :disabled="isEditLockedForSampleData"
           @click.stop="$emit('edit-title')"
         >
           <i class="ri-lg ri-pencil-line" />
@@ -155,7 +155,6 @@
 </template>
 
 <script>
-import { mapGetters } from 'vuex';
 import { mapState, storeToRefs } from 'pinia';
 import { toSentenceCase } from '@/utils/string';
 import { CrowdIntegrations } from '@/integrations/integrations-config';
@@ -171,7 +170,9 @@ import Message from '@/shared/message/message';
 import config from '@/config';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
 import { useActivityTypeStore } from '@/modules/activity/store/type';
-import { ConversationPermissions } from '../conversation-permissions';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
+import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
 
 export default {
   name: 'AppConversationDetails',
@@ -201,6 +202,14 @@ export default {
     },
   },
   emits: ['edit-title'],
+  setup() {
+    const authStore = useAuthStore();
+    const { user, tenant } = storeToRefs(authStore);
+
+    const { hasPermission } = usePermissions();
+
+    return { user, tenant, hasPermission };
+  },
   data() {
     return {
       sorter: 'all',
@@ -209,10 +218,9 @@ export default {
     };
   },
   computed: {
-    ...mapGetters({
-      currentTenant: 'auth/currentTenant',
-      currentUser: 'auth/currentUser',
-    }),
+    LfPermission() {
+      return LfPermission;
+    },
     ...mapState(useActivityTypeStore, {
       types: 'types',
     }),
@@ -235,12 +243,6 @@ export default {
       return this.editing
         ? this.conversation.activities
         : this.conversation.activities.slice(1);
-    },
-    isEditLockedForSampleData() {
-      return new ConversationPermissions(
-        this.currentTenant,
-        this.currentUser,
-      ).editLockedForSampleData;
     },
     conversationTypes() {
       const [, ...activities] = this.conversation.activities;
@@ -296,10 +298,10 @@ export default {
           filter: {
             and: [
               {
-                type: value,
+                type: { eq: value },
               },
               {
-                conversationId: this.conversation.id,
+                conversationId: { in: [this.conversation.id] },
               },
             ],
           },

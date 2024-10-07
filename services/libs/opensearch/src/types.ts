@@ -1,15 +1,13 @@
 export enum OpenSearchIndex {
   MEMBERS = 'members',
-  ACTIVITIES = 'activities',
   ORGANIZATIONS = 'organizations',
 }
 
 // Keeps track of version numbers for all OpenSearch indexes, aiding in managing documents.
 // for eg: members_v1, activities_v1, etc.
 export const IndexVersions = new Map<OpenSearchIndex, number>()
-IndexVersions.set(OpenSearchIndex.MEMBERS, 3)
-IndexVersions.set(OpenSearchIndex.ACTIVITIES, 3)
-IndexVersions.set(OpenSearchIndex.ORGANIZATIONS, 3)
+IndexVersions.set(OpenSearchIndex.MEMBERS, 4)
+IndexVersions.set(OpenSearchIndex.ORGANIZATIONS, 4)
 
 const prefixedMapping = {
   dynamic_templates: [
@@ -597,12 +595,10 @@ const prefixedSettings = {
 
 export const OPENSEARCH_INDEX_SETTINGS: Record<OpenSearchIndex, unknown> = {
   [OpenSearchIndex.MEMBERS]: prefixedSettings,
-  [OpenSearchIndex.ACTIVITIES]: prefixedSettings,
   [OpenSearchIndex.ORGANIZATIONS]: prefixedSettings,
 }
 
 export const OPENSEARCH_INDEX_MAPPINGS: Record<OpenSearchIndex, unknown> = {
   [OpenSearchIndex.MEMBERS]: prefixedMapping,
-  [OpenSearchIndex.ACTIVITIES]: prefixedMapping,
   [OpenSearchIndex.ORGANIZATIONS]: prefixedMapping,
 }

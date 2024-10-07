@@ -1,8 +1,9 @@
 import config from 'config'
 import { IRedisConfiguration } from '@crowd/redis'
 import { ISearchSyncApiConfig } from '@crowd/opensearch'
+import { IDatabaseConfig } from '@crowd/data-access-layer/src/database'
+import { IQueueClientConfig } from '@crowd/queue'
 import {
-  SQSConfiguration,
   S3Configuration,
   DbConfiguration,
   PlansConfiguration,
@@ -17,10 +18,8 @@ import {
   SendgridConfiguration,
   NetlifyConfiguration,
   TenantMode,
-  CubeJSConfiguration,
   ComprehendConfiguration,
   ClearbitConfiguration,
-  DevtoConfiguration,
   NangoConfiguration,
   EnrichmentConfiguration,
   EagleEyeConfiguration,
@@ -40,6 +39,8 @@ import {
   EncryptionConfiguration,
   IOpenStatusApiConfig,
   GithubTokenConfiguration,
+  GitlabConfiguration,
+  IRedditConfig,
 } from './configTypes'
 
 // TODO-kube
@@ -72,13 +73,17 @@ export const IS_CLOUD_ENV: boolean = IS_PROD_ENV || IS_STAGING_ENV
 export const ENCRYPTION_CONFIG: EncryptionConfiguration =
   config.get<EncryptionConfiguration>('encryption')
 
-export const SQS_CONFIG: SQSConfiguration = config.get<SQSConfiguration>('sqs')
+export const QUEUE_CONFIG: IQueueClientConfig = config.get<IQueueClientConfig>('queue')
 
 export const REDIS_CONFIG: IRedisConfiguration = config.get<IRedisConfiguration>('redis')
 
 export const S3_CONFIG: S3Configuration = config.get<S3Configuration>('s3')
 
 export const DB_CONFIG: DbConfiguration = config.get<DbConfiguration>('db')
+
+export const PRODUCT_DB_CONFIG: IDatabaseConfig = config.has('productDb')
+  ? config.get<IDatabaseConfig>('productDb')
+  : undefined
 
 export const SEGMENT_CONFIG: SegmentConfiguration = config.get<SegmentConfiguration>('segment')
 
@@ -94,8 +99,6 @@ export const AUTH0_CONFIG: Auth0Configuration = config.get<Auth0Configuration>('
 export const SSO_CONFIG: SSOConfiguration = config.get<SSOConfiguration>('sso')
 
 export const PLANS_CONFIG: PlansConfiguration = config.get<PlansConfiguration>('plans')
-
-export const DEVTO_CONFIG: DevtoConfiguration = config.get<DevtoConfiguration>('devto')
 
 export const TWITTER_CONFIG: TwitterConfiguration = config.get<TwitterConfiguration>('twitter')
 
@@ -113,8 +116,6 @@ export const GITHUB_CONFIG: GithubConfiguration = config.get<GithubConfiguration
 export const SENDGRID_CONFIG: SendgridConfiguration = config.get<SendgridConfiguration>('sendgrid')
 
 export const NETLIFY_CONFIG: NetlifyConfiguration = config.get<NetlifyConfiguration>('netlify')
-
-export const CUBEJS_CONFIG: CubeJSConfiguration = config.get<CubeJSConfiguration>('cubejs')
 
 export const NANGO_CONFIG: NangoConfiguration = config.get<NangoConfiguration>('nango')
 
@@ -161,3 +162,7 @@ export const SEARCH_SYNC_API_CONFIG: ISearchSyncApiConfig =
 
 export const OPEN_STATUS_API_CONFIG: IOpenStatusApiConfig =
   config.get<IOpenStatusApiConfig>('openStatusApi')
+
+export const GITLAB_CONFIG: GitlabConfiguration = config.get<GitlabConfiguration>('gitlab')
+
+export const REDDIT_CONFIG: IRedditConfig = config.get<IRedditConfig>('reddit')

@@ -1,10 +1,10 @@
 <template>
-  <el-container v-if="currentTenant && isAuthenticated" class="flex-col">
+  <el-container v-if="tenant" class="flex-col">
     <el-container style="height: calc(100vh - 60px); margin-top: 60px;">
       <!-- App menu -->
-      <app-lf-menu />
+      <lf-menu />
 
-      <el-container :style="elMainStyle" class="bg-white rounded-tl-2xl">
+      <el-container class="bg-white">
         <el-main id="main-page-wrapper" class="relative">
           <app-lf-banners />
           <router-view />
@@ -14,56 +14,18 @@
   </el-container>
 </template>
 
-<script>
-import { mapActions, mapGetters } from 'vuex';
-import AppLfMenu from '@/modules/lf/layout/components/lf-menu.vue';
+<script setup lang="ts">
 import AppLfBanners from '@/modules/lf/layout/components/lf-banners.vue';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import { storeToRefs } from 'pinia';
+import LfMenu from '@/modules/layout/components/menu/menu.vue';
 
+const authStore = useAuthStore();
+const { tenant } = storeToRefs(authStore);
+</script>
+
+<script lang="ts">
 export default {
   name: 'AppLayout',
-
-  components: {
-    AppLfMenu,
-    AppLfBanners,
-  },
-
-  computed: {
-    ...mapGetters({
-      currentTenant: 'auth/currentTenant',
-      isAuthenticated: 'auth/isAuthenticated',
-      menu: 'layout/menuCollapsed',
-    }),
-  },
-
-  watch: {
-    menu: {
-      handler(updatedValue) {
-        const param = this.$route.query.menu === 'true' || false;
-
-        if (updatedValue !== param) {
-          this.$router.replace({
-            query: { ...this.$route.query, menu: updatedValue },
-          });
-        }
-      },
-    },
-    '$route.query.menu': {
-      immediate: true,
-      deep: true,
-      handler(updatedValue) {
-        const param = updatedValue === 'true' || false;
-
-        if (this.menu !== param) {
-          this.toggleMenu();
-        }
-      },
-    },
-  },
-
-  methods: {
-    ...mapActions({
-      toggleMenu: 'layout/toggleMenu',
-    }),
-  },
 };
 </script>

@@ -6,7 +6,20 @@ import { Unleash, getUnleashClient } from '@crowd/feature-flags'
 import { Edition, SegmentData } from '@crowd/types'
 import { SERVICE, Error400 } from '@crowd/common'
 import { Client as TemporalClient, getTemporalClient } from '@crowd/temporal'
-import { API_CONFIG, IS_TEST_ENV, REDIS_CONFIG, TEMPORAL_CONFIG, UNLEASH_CONFIG } from '../../conf'
+import {
+  QueryExecutor,
+  SequelizeQueryExecutor,
+  TransactionalSequelizeQueryExecutor,
+} from '@crowd/data-access-layer/src/queryExecutor'
+import { DbConnection, getDbConnection } from '@crowd/data-access-layer/src/database'
+import {
+  API_CONFIG,
+  IS_TEST_ENV,
+  PRODUCT_DB_CONFIG,
+  REDIS_CONFIG,
+  TEMPORAL_CONFIG,
+  UNLEASH_CONFIG,
+} from '../../conf'
 import { databaseInit } from '../databaseConnection'
 import { IRepositoryOptions } from './IRepositoryOptions'
 import { IServiceOptions } from '../../services/IServiceOptions'
@@ -47,6 +60,11 @@ export default class SequelizeRepository {
       temporal = await getTemporalClient(TEMPORAL_CONFIG)
     }
 
+    let productDb: DbConnection | undefined
+    if (PRODUCT_DB_CONFIG) {
+      productDb = await getDbConnection(PRODUCT_DB_CONFIG)
+    }
+
     return {
       log: getServiceLogger(),
       database: await databaseInit(),
@@ -58,6 +76,7 @@ export default class SequelizeRepository {
       redis: await getRedisClient(REDIS_CONFIG, true),
       unleash,
       temporal,
+      productDb,
     }
   }
 
@@ -169,6 +188,13 @@ export default class SequelizeRepository {
 
   static getSequelize(options: IRepositoryOptions): Sequelize {
     return options.database.sequelize as Sequelize
+  }
+
+  static getQueryExecutor(options: IRepositoryOptions, transaction?): QueryExecutor {
+    const seq = this.getSequelize(options)
+    return transaction
+      ? new TransactionalSequelizeQueryExecutor(seq, transaction)
+      : new SequelizeQueryExecutor(seq)
   }
 
   static getSegmentIds(options: IRepositoryOptions): string[] {

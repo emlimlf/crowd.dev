@@ -16,6 +16,7 @@ export default {
   url: ({ username }) => (username ? `https://slack.com/${username}` : null),
   chartColor: '#E41756',
   showProfileLink: false,
+  placeholder: 'Slack username or email address',
   activityDisplay: {
     showLinkToUrl: true,
   },
@@ -25,8 +26,5 @@ export default {
       copy: 'reply',
       number: conversation.activityCount - 1,
     }),
-  },
-  organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
   },
 };

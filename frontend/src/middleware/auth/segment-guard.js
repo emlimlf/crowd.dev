@@ -1,12 +1,14 @@
-import { hasAccessToProjectGroup, hasAccessToSegmentId } from '@/utils/segments';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import Message from '@/shared/message/message';
 
 /**
  * Segment Guard
  *
  * This middleware runs before rendering any route that has meta.paramSegmentAccess = (route param that holds segmentId)
  *
- * It checks if currentUser has access to segment (if not, redirects to /403)
+ * It checks if user has access to segment (if not, redirects to /403)
  *
  * @param to
  * @param store
@@ -18,9 +20,12 @@ export default async function ({ to, store, router }) {
     return;
   }
 
-  await store.dispatch('auth/doWaitUntilInit');
+  const { ensureLoaded } = useAuthStore();
+  await ensureLoaded();
 
   const lsSegmentsStore = useLfSegmentsStore();
+
+  const { hasAccessToProjectGroup, hasAccessToSegmentId } = usePermissions();
   const isCheckingProjectGroup = to.meta.paramSegmentAccess.name === 'grandparent';
   let hasPermission;
 
@@ -33,6 +38,7 @@ export default async function ({ to, store, router }) {
   }
 
   if (!hasPermission) {
-    router.push('/403');
+    Message.error('You don\'t have access to this page');
+    router.push('/');
   }
 }

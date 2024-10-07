@@ -150,15 +150,15 @@
           <div v-if="isWebhookVerifying == null" />
           <div v-else-if="isWebhookVerifying">
             <i class="ri-loader-4-line animate-spin text-gray-900 w-[14px] mr-2" />
-            <span class="text-gray-900 text-[13px]">Verifying</span>
+            <span class="text-gray-900 text-sm">Verifying</span>
           </div>
           <div v-else-if="isWebhookValid">
             <i class="ri-check-line text-green-500 w-[14px] mr-2" />
-            <span class="text-green-500 text-[13px]">Succesfully verified</span>
+            <span class="text-green-500 text-sm">Succesfully verified</span>
           </div>
           <div v-else>
             <i class="ri-error-warning-line text-red-500 w-[14px] mr-2" />
-            <span class="text-red-500 text-[13px]">No webhooks received yet</span>
+            <span class="text-red-500 text-sm">No webhooks received yet</span>
           </div>
         </div>
         <div
@@ -210,9 +210,14 @@ import formChangeDetector from '@/shared/form/form-change';
 // import elementChangeDetector from '@/shared/form/element-change';
 import { IntegrationService } from '@/modules/integration/integration-service';
 import Message from '@/shared/message/message';
-import AuthCurrentTenant from '@/modules/auth/auth-current-tenant';
+import { AuthService } from '@/modules/auth/services/auth.service';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
+import { Platform } from '@/shared/modules/platform/types/Platform';
 
-const tenantId = AuthCurrentTenant.get();
+const { trackEvent } = useProductTracking();
+
+const tenantId = AuthService.getTenantId();
 
 const inputRef = ref();
 const showToken = ref(false);
@@ -398,13 +403,23 @@ const verifyWebhook = async () => {
 const connect = async () => {
   loading.value = true;
 
+  const isUpdate = props.integration.settings?.forumHostname;
+
   doDiscourseConnect({
     forumHostname: form.discourseURL,
     apiKey: form.apiKey,
     webhookSecret: webhookSecret.value,
-    isUpdate: props.integration.settings?.forumHostname,
+    isUpdate,
   })
     .then(() => {
+      trackEvent({
+        key: isUpdate ? FeatureEventKey.EDIT_INTEGRATION_SETTINGS : FeatureEventKey.CONNECT_INTEGRATION,
+        type: EventType.FEATURE,
+        properties: {
+          platform: Platform.DISCOURSE,
+        },
+      });
+
       isVisible.value = false;
     })
     .finally(() => {

@@ -1,3 +1,8 @@
+export interface ITenant {
+  tenantId: string
+  plan: string
+}
+
 export interface PageData<T> {
   rows: T[]
   count: number
@@ -21,4 +26,9 @@ export interface SearchCriteria {
 export enum AuthProvider {
   GOOGLE = 'google',
   GITHUB = 'github',
+}
+
+export enum SuggestionType {
+  MEMBERS = 'members',
+  ORGANIZATIONS = 'organizations',
 }

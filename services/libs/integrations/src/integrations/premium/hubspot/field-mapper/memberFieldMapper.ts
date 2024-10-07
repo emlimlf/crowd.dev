@@ -8,11 +8,13 @@ import {
   PlatformType,
   ITagOpensearch,
   OrganizationSource,
+  MemberIdentityType,
+  OrganizationIdentityType,
 } from '@crowd/types'
 import { HubspotPropertyType, IFieldProperty, IHubspotContact } from '../types'
 import { HubspotFieldMapper } from './hubspotFieldMapper'
 import { HubspotOrganizationFieldMapper } from './organizationFieldMapper'
-import { serializeArray, serializeDate } from './utils/serialization'
+import { serializeDate } from './utils/serialization'
 
 export class HubspotMemberFieldMapper extends HubspotFieldMapper {
   protected fieldProperties: Record<string, IFieldProperty> = {
@@ -27,10 +29,6 @@ export class HubspotMemberFieldMapper extends HubspotFieldMapper {
       hubspotType: HubspotPropertyType.DATE,
       readonly: true,
       serialize: serializeDate,
-    },
-    emails: {
-      hubspotType: HubspotPropertyType.STRING,
-      serialize: serializeArray,
     },
     joinedAt: {
       hubspotType: HubspotPropertyType.DATE,
@@ -158,12 +156,13 @@ export class HubspotMemberFieldMapper extends HubspotFieldMapper {
 
     // staticly defined member fields
     const member: IMemberData = {
-      emails: [contactProperties.email],
       identities: [
         {
           platform: PlatformType.HUBSPOT,
-          username: contactProperties.email,
+          value: contactProperties.email,
+          type: MemberIdentityType.EMAIL,
           sourceId: hubspotContact.id,
+          verified: true,
         },
       ],
       attributes: {
@@ -185,7 +184,7 @@ export class HubspotMemberFieldMapper extends HubspotFieldMapper {
         // For incoming integrations, we already get the member email from hubspot defined field `email`
         // if user mapped crowd field `emails` to some other field
         // this will be saved to the mapped field when sending the member back to hubspot
-        if (crowdKey !== 'emails' && contactProperties[hubspotPropertyName] !== null) {
+        if (contactProperties[hubspotPropertyName] !== null) {
           if (crowdKey.startsWith('attributes')) {
             const crowdAttributeName = crowdKey.split('.')[1] || null
 
@@ -199,17 +198,23 @@ export class HubspotMemberFieldMapper extends HubspotFieldMapper {
 
             if (identityPlatform) {
               member.identities.push({
-                username: contactProperties[hubspotPropertyName],
+                value: contactProperties[hubspotPropertyName],
+                type: MemberIdentityType.USERNAME,
                 platform: identityPlatform,
+                verified: false,
               })
             }
           } else if (crowdKey === 'organizationName') {
+            // TODO uros check if this is verified or not with anil
             member.organizations = [
               {
+                // names: [contactProperties[hubspotPropertyName]], // TODO migrate to attributes
                 identities: [
                   {
-                    name: contactProperties[hubspotPropertyName],
+                    value: contactProperties[hubspotPropertyName],
+                    type: OrganizationIdentityType.USERNAME,
                     platform: PlatformType.HUBSPOT,
+                    verified: true,
                   },
                 ],
                 source: OrganizationSource.HUBSPOT,

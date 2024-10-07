@@ -15,6 +15,7 @@ export default {
   url: ({ username }) => (username ? `https://news.ycombinator.com/user?id=${username}` : null),
   chartColor: '#FF712E',
   showProfileLink: true,
+  urlPrefix: 'news.ycombinator.com/user?id=',
   activityDisplay: {
     showLinkToUrl: true,
   },
@@ -24,8 +25,5 @@ export default {
       copy: 'reply',
       number: conversation.activityCount - 1,
     }),
-  },
-  organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
   },
 };

@@ -1,27 +1,26 @@
-import express from 'express'
 import { OrganizationSyncService } from '@crowd/opensearch'
-import { ApiRequest } from 'middleware'
-import { asyncWrap } from 'middleware/error'
-import { SERVICE_CONFIG } from 'conf'
+import express from 'express'
+import { ApiRequest } from '../middleware'
+import { asyncWrap } from '../middleware/error'
 
 const router = express.Router()
-const serviceConfig = SERVICE_CONFIG()
+
+const syncService = (req: ApiRequest): OrganizationSyncService =>
+  new OrganizationSyncService(req.qdbStore, req.pgStore, req.opensearch, req.log)
 
 router.post(
   '/sync/organizations',
   asyncWrap(async (req: ApiRequest, res) => {
-    const organizationSyncService = new OrganizationSyncService(
-      req.dbStore,
-      req.opensearch,
-      req.log,
-      serviceConfig,
-    )
-    const { organizationIds } = req.body
+    const organizationSyncService = syncService(req)
+    const { organizationIds, withAggs } = req.body
     try {
-      req.log.trace(`Calling organizationSyncService.syncOrganizations for ${organizationIds}`)
-      await organizationSyncService.syncOrganizations(organizationIds)
+      req.log.info(
+        `Calling organizationSyncService.syncOrganizations for ${organizationIds}, withAggs: ${withAggs}`,
+      )
+      await organizationSyncService.syncOrganizations(organizationIds, { withAggs })
       res.sendStatus(200)
     } catch (error) {
+      req.log.error(error)
       res.status(500).send(error.message)
     }
   }),
@@ -30,12 +29,7 @@ router.post(
 router.post(
   '/sync/tenant/organizations',
   asyncWrap(async (req: ApiRequest, res) => {
-    const organizationSyncService = new OrganizationSyncService(
-      req.dbStore,
-      req.opensearch,
-      req.log,
-      serviceConfig,
-    )
+    const organizationSyncService = syncService(req)
 
     const { tenantId } = req.body
     try {
@@ -45,6 +39,7 @@ router.post(
       await organizationSyncService.syncTenantOrganizations(tenantId)
       res.sendStatus(200)
     } catch (error) {
+      req.log.error(error)
       res.status(500).send(error.message)
     }
   }),
@@ -53,12 +48,7 @@ router.post(
 router.post(
   '/cleanup/tenant/organizations',
   asyncWrap(async (req: ApiRequest, res) => {
-    const organizationSyncService = new OrganizationSyncService(
-      req.dbStore,
-      req.opensearch,
-      req.log,
-      serviceConfig,
-    )
+    const organizationSyncService = syncService(req)
 
     const { tenantId } = req.body
     try {
@@ -68,6 +58,7 @@ router.post(
       await organizationSyncService.cleanupOrganizationIndex(tenantId)
       res.sendStatus(200)
     } catch (error) {
+      req.log.error(error)
       res.status(500).send(error.message)
     }
   }),
@@ -76,12 +67,7 @@ router.post(
 router.post(
   '/cleanup/organization',
   asyncWrap(async (req: ApiRequest, res) => {
-    const organizationSyncService = new OrganizationSyncService(
-      req.dbStore,
-      req.opensearch,
-      req.log,
-      serviceConfig,
-    )
+    const organizationSyncService = syncService(req)
 
     const { organizationId } = req.body
     try {
@@ -91,6 +77,7 @@ router.post(
       await organizationSyncService.removeOrganization(organizationId)
       res.sendStatus(200)
     } catch (error) {
+      req.log.error(error)
       res.status(500).send(error.message)
     }
   }),

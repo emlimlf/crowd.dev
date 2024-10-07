@@ -10,20 +10,24 @@
     :settings="settings"
     :has-settings="true"
     :has-integration="isTwitterEnabled"
+    :settings-component="TwitterSettings"
   />
 </template>
 
 <script setup>
-import { useStore } from 'vuex';
 import {
   defineProps, computed, ref, onMounted,
 } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import config from '@/config';
-import { AuthToken } from '@/modules/auth/auth-token';
+
 import Message from '@/shared/message/message';
 import AppTwitterConnectDrawer from '@/integrations/twitter/components/twitter-connect-drawer.vue';
 import { FeatureFlag } from '@/utils/featureFlag';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import { storeToRefs } from 'pinia';
+import { AuthService } from '@/modules/auth/services/auth.service';
+import TwitterSettings from './twitter-settings.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -35,7 +39,6 @@ const props = defineProps({
     default: () => {},
   },
 });
-const store = useStore();
 const drawerVisible = ref(false);
 
 onMounted(() => {
@@ -43,14 +46,12 @@ onMounted(() => {
 
   if (isConnectionSuccessful) {
     router.replace({ query: null });
-    Message.success('Integration updated successfuly');
+    Message.success('Integration updated successfully');
   }
 });
 
 onMounted(async () => {
-  isTwitterEnabled.value = FeatureFlag.isFlagEnabled(
-    FeatureFlag.flags.twitter,
-  );
+  isTwitterEnabled.value = FeatureFlag.isFlagEnabled(FeatureFlag.flags.twitter);
 });
 
 // Only render twitter drawer and settings button, if integration has settings
@@ -63,9 +64,14 @@ const hashtags = computed(() => props.integration.settings?.hashtags || []);
 const connectUrl = computed(() => {
   const redirectUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}?success=true`;
 
+  const authStore = useAuthStore();
+  const { tenant } = storeToRefs(authStore);
+
   return `${config.backendUrl}/twitter/${
-    store.getters['auth/currentTenant'].id
-  }/connect?redirectUrl=${redirectUrl}&crowdToken=${AuthToken.get()}&segments[]=${route.params.id}`;
+    tenant.value.id
+  }/connect?redirectUrl=${redirectUrl}&crowdToken=${AuthService.getToken()}&segments[]=${
+    route.params.id
+  }`;
 });
 
 const connect = () => {

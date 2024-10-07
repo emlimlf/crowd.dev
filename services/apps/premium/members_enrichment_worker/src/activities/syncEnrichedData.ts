@@ -1,25 +1,28 @@
 import { MemberSyncService, OrganizationSyncService } from '@crowd/opensearch'
 
 import { svc } from '../main'
+import { DbStore } from '@crowd/data-access-layer/src/database'
 
-const syncMembers = new MemberSyncService(svc.redis, svc.postgres.writer, svc.opensearch, svc.log, {
-  edition: process.env['CROWD_EDITION'],
-})
+const syncMembers = new MemberSyncService(
+  svc.redis,
+  svc.postgres.writer,
+  new DbStore(svc.log, svc.questdbSQL),
+  svc.opensearch,
+  svc.log,
+)
 
 const syncOrganizations = new OrganizationSyncService(
+  new DbStore(svc.log, svc.questdbSQL),
   svc.postgres.writer,
   svc.opensearch,
   svc.log,
-  {
-    edition: process.env['CROWD_EDITION'],
-  },
 )
 
 /*
 syncMembersToOpensearch is a Temporal activity that sync a newly enriched member
 in database to OpenSearch.
 */
-export async function syncMembersToOpensearch(input: string[]): Promise<void> {
+export async function syncMembersToOpensearch(input: string): Promise<void> {
   try {
     syncMembers.syncMembers(input)
   } catch (err) {

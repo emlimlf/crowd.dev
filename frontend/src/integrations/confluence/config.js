@@ -1,4 +1,3 @@
-import config from '@/config';
 import ConfluenceConnect from './components/confluence-connect.vue';
 
 export default {
@@ -12,10 +11,11 @@ export default {
     description: 'Sync documentation activities from your repos.',
   },
   image:
-    '/images/integrations/conf.jpg',
+    '/images/integrations/confluence.svg',
   connectComponent: ConfluenceConnect,
   url: () => null,
   showProfileLink: false,
+  placeholder: 'Confluence username or email address',
   chartColor: '#E5512C',
   activityDisplay: {
     showContentDetails: false,
@@ -32,8 +32,5 @@ export default {
       insertions: attributes.insertions,
       deletions: attributes.deletions,
     }),
-  },
-  organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
   },
 };

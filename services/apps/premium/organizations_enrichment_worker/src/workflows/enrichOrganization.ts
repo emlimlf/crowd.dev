@@ -1,24 +1,15 @@
 import { proxyActivities } from '@temporalio/workflow'
-import * as activities from '../activities/organizationEnrichment'
-import { TenantPlans } from '@crowd/types'
+import * as activities from '../activities/enrichment'
+import { IEnrichableOrganizationData } from '@crowd/data-access-layer/src/organizations'
 
-const { tryEnrichOrganization, incrementTenantCredits, syncToOpensearch } = proxyActivities<
-  typeof activities
->({
+const aCtx = proxyActivities<typeof activities>({
   startToCloseTimeout: '75 seconds',
 })
 
-export interface IEnrichOrganizationInput {
-  organizationId: string
-  tenantId: string
-  plan: TenantPlans
-}
+export async function enrichOrganization(org: IEnrichableOrganizationData): Promise<void> {
+  const updated = await aCtx.tryEnrichOrganization(org.organizationId)
 
-export async function enrichOrganization(input: IEnrichOrganizationInput): Promise<void> {
-  const wasEnriched = await tryEnrichOrganization(input.tenantId, input.organizationId)
-
-  if (wasEnriched) {
-    await syncToOpensearch(input.organizationId)
-    await incrementTenantCredits(input.tenantId, input.plan)
+  if (updated) {
+    await aCtx.syncToOpensearch(org.tenantId, org.organizationId)
   }
 }

@@ -2,15 +2,14 @@
   <div class="panel !p-6">
     <!-- header -->
     <app-dashboard-widget-header
-      title="Contributors"
+      title="People"
       :total-loading="members.loadingRecent"
       :total="members.total"
       :route="{
         name: 'member',
-        query: filterQueryService().setQuery(allContacts.config),
+        query: filterQueryService().setQuery(allMembers.config),
       }"
-      button-title="All contributors"
-      report-name="Members report"
+      button-title="All people"
     />
 
     <div class="flex -mx-5 pt-7">
@@ -22,24 +21,25 @@
             <h6
               class="text-sm leading-5 font-semibold mb-1"
             >
-              New contributors
+              New people
             </h6>
             <app-dashboard-count
-              :loading="members.loadingRecent"
-              :query="newMembersCount"
+              :loading="!chartData"
+              :current-total="chartData?.newMembers.total"
+              :previous-total="chartData?.newMembers.previousPeriodTotal"
             />
           </div>
           <div class="w-7/12">
             <!-- Chart -->
             <div
-              v-if="members.loadingRecent"
-              v-loading="members.loadingRecent"
+              v-if="!chartData"
+              v-loading="!chartData"
               class="app-page-spinner !relative chart-loading"
             />
             <app-dashboard-widget-chart
               v-else
-              :datasets="datasets('new members')"
-              :query="newMembersChart"
+              :data="chartData?.newMembers.timeseries"
+              :datasets="datasets('new people')"
             />
           </div>
         </div>
@@ -82,7 +82,7 @@
               icon-class="ri-group-2-line"
               class="pt-6 pb-5"
             >
-              No new contributors during this period
+              No new people during this period
             </app-dashboard-empty-state>
             <div
               v-if="recentMembers.length >= 5"
@@ -92,7 +92,7 @@
                 :to="{
                   name: 'member',
                   query: filterQueryService().setQuery({
-                    ...allContacts.config,
+                    ...allMembers.config,
                     joinedDate: {
                       value: periodRange,
                       operator: 'between',
@@ -117,10 +117,10 @@
               <h6
                 class="text-sm leading-5 font-semibold"
               >
-                Active <span>contributors</span>
+                Active people
                 <el-tooltip
                   placement="top"
-                  content="Contacts for whom at least one activity was tracked in the selected time period."
+                  content="People for whom at least one activity was tracked in the selected time period."
                   popper-class="max-w-[260px]"
                 >
                   <i class="ri-information-line text-sm ml-1 font-normal" />
@@ -130,21 +130,22 @@
 
             <!-- info -->
             <app-dashboard-count
-              :loading="members.loadingActive"
-              :query="activeMembersCount"
+              :loading="!chartData"
+              :current-total="chartData?.activeMembers.total"
+              :previous-total="chartData?.activeMembers.previousPeriodTotal"
             />
           </div>
           <div class="w-7/12 h-21">
             <!-- Chart -->
             <div
-              v-if="members.loadingActive"
-              v-loading="members.loadingActive"
+              v-if="!chartData"
+              v-loading="!chartData"
               class="app-page-spinner !relative chart-loading"
             />
             <app-dashboard-widget-chart
               v-else
               :datasets="datasets('active members')"
-              :query="activeMembersChart"
+              :data="chartData?.activeMembers.timeseries"
             />
           </div>
         </div>
@@ -181,7 +182,7 @@
               icon-class="ri-group-2-line"
               class="pt-6 pb-5"
             >
-              No active contributors during this period
+              No active people during this period
             </app-dashboard-empty-state>
             <div
               v-if="activeMembers.length >= 5"
@@ -191,7 +192,7 @@
                 :to="{
                   name: 'member',
                   query: filterQueryService().setQuery({
-                    ...allContacts.config,
+                    ...allMembers.config,
                     lastActivityDate: {
                       value: periodRange,
                       operator: 'between',
@@ -210,87 +211,47 @@
   </div>
 </template>
 
-<script>
-import { mapGetters } from 'vuex';
+<script lang="ts" setup>
+import { computed } from 'vue';
 import moment from 'moment';
-import {
-  newMembersChart,
-  activeMembersChart,
-  activeMembersCount,
-  newMembersCount,
-} from '@/modules/dashboard/dashboard.cube';
-import { CrowdIntegrations } from '@/integrations/integrations-config';
 import { formatDateToTimeAgo } from '@/utils/date';
 import AppDashboardEmptyState from '@/modules/dashboard/components/dashboard-empty-state.vue';
 import AppDashboardWidgetHeader from '@/modules/dashboard/components/dashboard-widget-header.vue';
 import AppDashboardWidgetChart from '@/modules/dashboard/components/dashboard-widget-chart.vue';
-import { DAILY_GRANULARITY_FILTER } from '@/modules/widget/widget-constants';
 import AppDashboardMemberItem from '@/modules/dashboard/components/member/dashboard-member-item.vue';
 import AppDashboardCount from '@/modules/dashboard/components/dashboard-count.vue';
 import { filterQueryService } from '@/shared/modules/filters/services/filter-query.service';
-import { storeToRefs } from 'pinia';
-import { useLfSegmentsStore } from '@/modules/lf/segments/store';
-import allContacts from '@/modules/member/config/saved-views/views/all-contacts';
+import allMembers from '@/modules/member/config/saved-views/views/all-members';
+import { CrowdIntegrations } from '@/integrations/integrations-config';
+import { mapGetters } from '@/shared/vuex/vuex.helpers';
 
+const {
+  chartData, members, period, activeMembers, recentMembers,
+} = mapGetters('dashboard');
+
+const periodRange = computed(() => [
+  moment()
+    .utc()
+    .subtract(period.value - 1, 'day')
+    .format('YYYY-MM-DD'),
+  moment()
+    .utc()
+    .format('YYYY-MM-DD'),
+]);
+const datasets = (name: string) => [{
+  name,
+  borderColor: '#003778',
+  measure: 'Members.count',
+  granularity: 'day',
+}];
+
+const getPlatformDetails = (platform: string) => CrowdIntegrations.getConfig(platform);
+
+</script>
+
+<script lang="ts">
 export default {
-  name: 'AppDashboardMember',
-  components: {
-    AppDashboardWidgetChart,
-    AppDashboardWidgetHeader,
-    AppDashboardEmptyState,
-    AppDashboardMemberItem,
-    AppDashboardCount,
-  },
-  data() {
-    return {
-      newMembersChart,
-      newMembersCount,
-      activeMembersChart,
-      activeMembersCount,
-      formatDateToTimeAgo,
-      filterQueryService,
-      allContacts,
-    };
-  },
-  computed: {
-    ...mapGetters('dashboard', [
-      'activeMembers',
-      'recentMembers',
-      'members',
-      'period',
-    ]),
-    periodRange() {
-      return [
-        moment()
-          .utc()
-          .subtract(this.period.value - 1, 'day')
-          .format('YYYY-MM-DD'),
-        moment()
-          .utc()
-          .format('YYYY-MM-DD'),
-      ];
-    },
-    selectedProjectGroup() {
-      const lsSegmentsStore = useLfSegmentsStore();
-
-      return storeToRefs(lsSegmentsStore).selectedProjectGroup.value;
-    },
-  },
-  methods: {
-    datasets(name) {
-      return [
-        {
-          name,
-          borderColor: '#003778',
-          measure: 'Members.count',
-          granularity: DAILY_GRANULARITY_FILTER.value,
-        },
-      ];
-    },
-    getPlatformDetails(platform) {
-      return CrowdIntegrations.getConfig(platform);
-    },
-  },
+  name: 'LfDashboardMember',
 };
 </script>
 

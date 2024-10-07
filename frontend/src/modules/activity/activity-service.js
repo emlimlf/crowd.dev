@@ -1,9 +1,19 @@
 import authAxios from '@/shared/axios/auth-axios';
-import AuthCurrentTenant from '@/modules/auth/auth-current-tenant';
+import { AuthService } from '@/modules/auth/services/auth.service';
+import { useLfSegmentsStore } from '@/modules/lf/segments/store';
+import { getSegmentsFromProjectGroup } from '@/utils/segments';
+import { storeToRefs } from 'pinia';
+
+const getSelectedProjectGroup = () => {
+  const lsSegmentsStore = useLfSegmentsStore();
+  const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
+
+  return selectedProjectGroup.value;
+};
 
 export class ActivityService {
   static async update(id, data, segments) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.put(
       `/tenant/${tenantId}/activity/${id}`,
@@ -22,20 +32,17 @@ export class ActivityService {
       segments,
     };
 
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
-    const response = await authAxios.delete(
-      `/tenant/${tenantId}/activity`,
-      {
-        params,
-      },
-    );
+    const response = await authAxios.delete(`/tenant/${tenantId}/activity`, {
+      params,
+    });
 
     return response.data;
   }
 
   static async create(data, segments) {
-    const tenantId = AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.post(
       `/tenant/${tenantId}/activity`,
@@ -48,18 +55,25 @@ export class ActivityService {
     return response.data;
   }
 
-  static async query(
-    body,
-  ) {
-    const sampleTenant = AuthCurrentTenant.getSampleTenantData();
-    const tenantId = sampleTenant?.id || AuthCurrentTenant.get();
+  static async query(body, countOnly = false) {
+    const tenantId = AuthService.getTenantId();
 
+    // const segments = [
+    //   ...body?.segments ?? getSegmentsFromProjectGroup(getSelectedProjectGroup()),
+    //   getSelectedProjectGroup().id,
+    // ];
+    // If tenant is less than a month old, use old query
+    // Else use new query
     const response = await authAxios.post(
       `/tenant/${tenantId}/activity/query`,
-      body,
+      {
+        ...body,
+        countOnly,
+        segments: body.segments,
+      },
       {
         headers: {
-          Authorization: sampleTenant?.token,
+          'x-crowd-api-version': '1',
         },
       },
     );
@@ -68,15 +82,11 @@ export class ActivityService {
   }
 
   static async listActivityTypes(segments) {
-    const sampleTenant = AuthCurrentTenant.getSampleTenantData();
-    const tenantId = sampleTenant?.id || AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.get(
       `/tenant/${tenantId}/activity/type`,
       {
-        headers: {
-          Authorization: sampleTenant?.token,
-        },
         params: {
           segments,
         },
@@ -87,15 +97,11 @@ export class ActivityService {
   }
 
   static async listActivityChannels(segments) {
-    const sampleTenant = AuthCurrentTenant.getSampleTenantData();
-    const tenantId = sampleTenant?.id || AuthCurrentTenant.get();
+    const tenantId = AuthService.getTenantId();
 
     const response = await authAxios.get(
       `/tenant/${tenantId}/activity/channel`,
       {
-        headers: {
-          Authorization: sampleTenant?.token,
-        },
         params: {
           segments,
         },

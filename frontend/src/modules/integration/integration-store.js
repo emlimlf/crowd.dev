@@ -3,6 +3,7 @@ import Errors from '@/shared/error/errors';
 import { router } from '@/router';
 import { CrowdIntegrations } from '@/integrations/integrations-config';
 import { isCurrentDateAfterGivenWorkingDays } from '@/utils/date';
+import { showIntegrationProgressNotification } from '@/modules/integration/helpers/integration-progress-notification';
 import Message from '../../shared/message/message';
 
 export const ERROR_BANNER_WORKING_DAYS_DISPLAY = 3;
@@ -28,9 +29,7 @@ export default {
 
     find: (state) => (id) => state.byId[id],
 
-    findByPlatform: (state, getters) => (platform) => getters.array.find(
-      (w) => w.platform === platform,
-    ),
+    findByPlatform: (state, getters) => (platform) => getters.array.find((w) => w.platform === platform),
 
     list: (state) => Object.keys(state.byId).reduce((acc, key) => {
       const integrationJsonData = CrowdIntegrations.getConfig(
@@ -65,21 +64,19 @@ export default {
       return acc;
     }, {}),
 
-    inProgress: (state, getters) => getters.array.filter(
-      (i) => i.status === 'in-progress',
-    ),
+    inProgress: (state, getters) => getters.array.filter((i) => i.status === 'in-progress'),
 
     withErrors: (state, getters) => getters.array.filter(
-      (i) => i.status === 'error' && isCurrentDateAfterGivenWorkingDays(i.updatedAt, ERROR_BANNER_WORKING_DAYS_DISPLAY),
+      (i) => i.status === 'error'
+          && isCurrentDateAfterGivenWorkingDays(
+            i.updatedAt,
+            ERROR_BANNER_WORKING_DAYS_DISPLAY,
+          ),
     ),
 
-    withNoData: (state, getters) => getters.array.filter(
-      (i) => i.status === 'no-data',
-    ),
+    withNoData: (state, getters) => getters.array.filter((i) => i.status === 'no-data'),
 
-    needsReconnect: (state, getters) => getters.array.filter(
-      (i) => i.status === 'needs-reconnect',
-    ),
+    needsReconnect: (state, getters) => getters.array.filter((i) => i.status === 'needs-reconnect'),
 
     count: (state) => state.count,
 
@@ -201,7 +198,13 @@ export default {
       try {
         commit('FETCH_STARTED');
 
-        const response = await IntegrationService.list(null, null, null, null, segments);
+        const response = await IntegrationService.list(
+          null,
+          null,
+          null,
+          null,
+          segments,
+        );
 
         commit('FETCH_SUCCESS', {
           rows: response.rows,
@@ -218,9 +221,7 @@ export default {
         commit('DESTROY_STARTED');
 
         await IntegrationService.destroyAll([integrationId]);
-        Message.success(
-          'Integration was disconnected successfully',
-        );
+        Message.success('Integration was disconnected successfully');
 
         commit('DESTROY_SUCCESS', integrationId);
       } catch (error) {
@@ -233,9 +234,7 @@ export default {
       try {
         commit('DESTROY_ALL_STARTED');
 
-        const response = await IntegrationService.destroyAll(
-          integrationIds,
-        );
+        const response = await IntegrationService.destroyAll(integrationIds);
 
         commit('DESTROY_ALL_SUCCESS', response);
       } catch (error) {
@@ -269,12 +268,13 @@ export default {
           setupAction,
         );
         const repos = integration?.settings?.repos || [];
-        const data = repos.reduce((a, b) => ({
-          ...a,
-          [b.url]: integration.segmentId,
-        }), {});
-
-        await IntegrationService.githubMapRepos(integration.id, data);
+        const data = repos.reduce(
+          (a, b) => ({
+            ...a,
+            [b.url]: integration.segmentId,
+          }),
+          {},
+        );
 
         dispatch('doFetch');
 
@@ -300,13 +300,8 @@ export default {
         const integration = await IntegrationService.redditOnboard(subreddits);
 
         commit('CREATE_SUCCESS', integration);
-        Message.success(
-          'The first activities will show up in a couple of seconds. <br /> <br /> '
-          + 'This process might take a few minutes to finish, depending on the amount of data.',
-          {
-            title: 'Reddit integration created successfully',
-          },
-        );
+
+        showIntegrationProgressNotification('reddit', integration.segmentId);
         router.push({
           name: 'integration',
           params: {
@@ -326,16 +321,10 @@ export default {
         const integration = await IntegrationService.linkedinConnect();
 
         commit('CREATE_SUCCESS', integration);
-        if (
-          integration.settings?.organizations.length === 1
-        ) {
-          Message.success(
-            'The first activities will show up in a couple of seconds. <br /> <br /> '
-            + 'This process might take a few minutes to finish, depending on the amount of data.',
-            {
-              title:
-                'LinkedIn integration created successfully',
-            },
+        if (integration.settings?.organizations.length === 1) {
+          showIntegrationProgressNotification(
+            'linkedin',
+            integration.segmentId,
           );
         }
         router.push({
@@ -359,14 +348,9 @@ export default {
         );
 
         commit('UPDATE_SUCCESS', integration);
-        Message.success(
-          'The first activities will show up in a couple of seconds. <br /> <br /> '
-          + 'This process might take a few minutes to finish, depending on the amount of data.',
-          {
-            title:
-              'LinkedIn integration updated successfully',
-          },
-        );
+
+        showIntegrationProgressNotification('linkedin', integration.segmentId);
+
         router.push({
           name: 'integration',
           params: {
@@ -388,14 +372,8 @@ export default {
         const integration = await IntegrationService.discordConnect(guildId);
 
         commit('CREATE_SUCCESS', integration);
-        Message.success(
-          'The first activities will show up in a couple of seconds. <br /> '
-          + 'This process might take a few minutes to finish, depending on the amount of data.',
-          {
-            title:
-              'Discord integration created successfully',
-          },
-        );
+
+        showIntegrationProgressNotification('discord', integration.segmentId);
         router.push({
           name: 'integration',
           params: {
@@ -408,10 +386,7 @@ export default {
       }
     },
 
-    async doDevtoConnect(
-      { commit },
-      { users, organizations, apiKey },
-    ) {
+    async doDevtoConnect({ commit }, { users, organizations, apiKey }) {
       // Function to connect to Dev.to. We just need to store the
       // users and organizations we want to track
 
@@ -426,13 +401,7 @@ export default {
 
         commit('CREATE_SUCCESS', integration);
 
-        Message.success(
-          'The first activities will show up in a couple of seconds. <br /> <br /> '
-          + 'This process might take a few minutes to finish, depending on the amount of data.',
-          {
-            title: 'DEV integration created successfully',
-          },
-        );
+        showIntegrationProgressNotification('devto', integration.segmentId);
 
         router.push({
           name: 'integration',
@@ -446,10 +415,7 @@ export default {
       }
     },
 
-    async doHackerNewsConnect(
-      { commit },
-      { keywords, urls },
-    ) {
+    async doHackerNewsConnect({ commit }, { keywords, urls }) {
       // Function to connect to Dev.to. We just need to store the
       // users and organizations we want to track
 
@@ -463,13 +429,9 @@ export default {
 
         commit('CREATE_SUCCESS', integration);
 
-        Message.success(
-          'The first activities will show up in a couple of seconds. <br /> <br /> '
-          + 'This process might take a few minutes to finish, depending on the amount of data.',
-          {
-            title:
-              'Hacker News integration created successfully',
-          },
+        showIntegrationProgressNotification(
+          'hackernews',
+          integration.segmentId,
         );
 
         router.push({
@@ -484,10 +446,7 @@ export default {
       }
     },
 
-    async doStackOverflowOnboard(
-      { commit },
-      { tags, keywords },
-    ) {
+    async doStackOverflowOnboard({ commit }, { tags, keywords }) {
       // Function to connect to StackOverflow.
 
       try {
@@ -500,13 +459,9 @@ export default {
 
         commit('CREATE_SUCCESS', integration);
 
-        Message.success(
-          'The first activities will show up in a couple of seconds. <br /> <br /> '
-          + 'This process might take a few minutes to finish, depending on the amount of data.',
-          {
-            title:
-              'Stack Overflow integration created successfully',
-          },
+        showIntegrationProgressNotification(
+          'stackoverflow',
+          integration.segmentId,
         );
 
         router.push({
@@ -521,9 +476,7 @@ export default {
       }
     },
 
-    async doHubspotConnect(
-      { commit },
-    ) {
+    async doHubspotConnect({ commit }) {
       try {
         commit('CREATE_STARTED');
 
@@ -538,25 +491,21 @@ export default {
       }
     },
 
-    async doGitConnect(
-      { commit },
-      { remotes, isUpdate },
-    ) {
+    async doGitConnect({ commit }, { remotes, isUpdate }) {
       try {
         commit('CREATE_STARTED');
 
-        const integration = await IntegrationService.gitConnect(
-          remotes,
-        );
+        const integration = await IntegrationService.gitConnect(remotes);
 
         commit('CREATE_SUCCESS', integration);
 
         Message.success(
           'The first activities will show up in a couple of seconds. <br /> <br /> '
-          + 'This process might take a few minutes to finish, depending on the amount of data.',
+            + 'This process might take a few minutes to finish, depending on the amount of data.',
           {
-            title:
-              `Git integration ${isUpdate ? 'updated' : 'created'} successfully`,
+            title: `Git integration ${
+              isUpdate ? 'updated' : 'created'
+            } successfully`,
           },
         );
 
@@ -572,15 +521,12 @@ export default {
       }
     },
 
-    async doConfluenceConnect(
-      { commit },
-      { remotes, isUpdate },
-    ) {
+    async doConfluenceConnect({ commit }, { settings, isUpdate }) {
       try {
         commit('CREATE_STARTED');
 
         const integration = await IntegrationService.confluenceConnect(
-          remotes,
+          settings,
         );
 
         commit('CREATE_SUCCESS', integration);
@@ -589,8 +535,9 @@ export default {
           'The first activities will show up in a couple of seconds. <br /> <br /> '
             + 'This process might take a few minutes to finish, depending on the amount of data.',
           {
-            title:
-                  `Confluence integration ${isUpdate ? 'updated' : 'created'} successfully`,
+            title: `Confluence integration ${
+              isUpdate ? 'updated' : 'created'
+            } successfully`,
           },
         );
 
@@ -609,24 +556,20 @@ export default {
     async doGerritConnect(
       { commit },
       {
-        orgURL,
-        projectName,
-        user,
-        key,
-        isUpdate,
+        orgURL, user, key, isUpdate, repoNames, enableAllRepos, enableGit,
       },
     ) {
       try {
         commit('CREATE_STARTED');
 
-        const integration = await IntegrationService.gerritConnect(
-          {
-            orgURL,
-            projectName,
-            user,
-            key,
-          },
-        );
+        const integration = await IntegrationService.gerritConnect({
+          orgURL,
+          user,
+          key,
+          repoNames,
+          enableAllRepos,
+          enableGit,
+        });
 
         commit('CREATE_SUCCESS', integration);
 
@@ -634,8 +577,9 @@ export default {
           'The first activities will show up in a couple of seconds. <br /> <br /> '
             + 'This process might take a few minutes to finish, depending on the amount of data.',
           {
-            title:
-                  `Gerrit integration ${isUpdate ? 'updated' : 'created'} successfully`,
+            title: `Gerrit integration ${
+              isUpdate ? 'updated' : 'created'
+            } successfully`,
           },
         );
 
@@ -670,10 +614,11 @@ export default {
 
         Message.success(
           'The first activities will show up in a couple of seconds. <br /> <br /> '
-          + 'This process might take a few minutes to finish, depending on the amount of data.',
+            + 'This process might take a few minutes to finish, depending on the amount of data.',
           {
-            title:
-              `Discourse integration ${isUpdate ? 'updated' : 'created'} successfully`,
+            title: `Discourse integration ${
+              isUpdate ? 'updated' : 'created'
+            } successfully`,
           },
         );
 
@@ -692,10 +637,10 @@ export default {
     async doGroupsioConnect(
       { commit },
       {
-        email, token, tokenExpiry, password, groupNames, isUpdate,
+        email, token, tokenExpiry, password, groups, isUpdate,
       },
     ) {
-      console.log('doGroupsioConnect', email, token, groupNames, isUpdate);
+      console.log('doGroupsioConnect', email, token, groups, isUpdate);
 
       try {
         commit('CREATE_STARTED');
@@ -705,18 +650,19 @@ export default {
           token,
           tokenExpiry,
           password,
-          groupNames,
+          groups,
         );
 
         commit('CREATE_SUCCESS', integration);
 
         Message.success(
           'The first activities will show up in a couple of seconds. <br /> <br /> '
-          + 'This process might take a few minutes to finish, depending on the amount of data.',
+            + 'This process might take a few minutes to finish, depending on the amount of data.',
           {
-            title:
-              `
-              groups.io integration ${isUpdate ? 'updated' : 'created'} successfully`,
+            title: `
+              groups.io integration ${
+  isUpdate ? 'updated' : 'created'
+} successfully`,
           },
         );
 
@@ -728,12 +674,83 @@ export default {
         });
       } catch (error) {
         Errors.handle(error);
-        Message.error(
-          'Something went wrong. Please try again later.',
-        );
+        Message.error('Something went wrong. Please try again later.');
         commit('CREATE_ERROR');
       }
     },
-  },
 
+    async doJiraConnect(
+      { commit },
+      {
+        url, username, personalAccessToken, apiToken, projects, isUpdate,
+      },
+    ) {
+      try {
+        commit('CREATE_STARTED');
+
+        const integration = await IntegrationService.jiraConnect(
+          url,
+          username,
+          personalAccessToken,
+          apiToken,
+          projects,
+        );
+
+        commit('CREATE_SUCCESS', integration);
+
+        Message.success(
+          'The first activities will show up in a couple of seconds. <br /> <br /> '
+            + 'This process might take a few minutes to finish, depending on the amount of data.',
+          {
+            title: `
+              Jira integration ${
+  isUpdate ? 'updated' : 'created'
+} successfully`,
+          },
+        );
+
+        router.push({
+          name: 'integration',
+          params: {
+            id: integration.segmentId,
+          },
+        });
+      } catch (error) {
+        Errors.handle(error);
+        Message.error('Something went wrong. Please try again later.');
+        commit('CREATE_ERROR');
+      }
+    },
+
+    async doGitlabConnect({ commit, dispatch }, { code, state }) {
+      try {
+        commit('CREATE_STARTED');
+        const integration = await IntegrationService.gitlabConnect(code, state);
+        commit('CREATE_SUCCESS', integration);
+        dispatch('doFetch');
+
+        router.push({
+          name: 'integration',
+          params: {
+            id: integration.segmentId,
+          },
+        });
+
+        dispatch('doFetch', [integration.segmentId]);
+      } catch (error) {
+        Errors.handle(error);
+        commit('CREATE_ERROR');
+      }
+    },
+    async mapGitlabRepos(integrationId, mapping) {
+      try {
+        await IntegrationService.mapGitlabRepos(integrationId, mapping);
+        await this.find(integrationId);
+        Message.success('GitLab repositories mapped successfully');
+      } catch (error) {
+        console.error('Error mapping GitLab repositories:', error);
+        Message.error('Failed to map GitLab repositories');
+      }
+    },
+  },
 };

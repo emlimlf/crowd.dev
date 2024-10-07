@@ -1,29 +1,25 @@
 import express from 'express'
 import { MemberSyncService } from '@crowd/opensearch'
-import { ApiRequest } from 'middleware'
-import { asyncWrap } from 'middleware/error'
-import { SERVICE_CONFIG } from 'conf'
+import { ApiRequest } from '../middleware'
+import { asyncWrap } from '../middleware/error'
 
 const router = express.Router()
-const serviceConfig = SERVICE_CONFIG()
+
+const syncService = (req: ApiRequest): MemberSyncService =>
+  new MemberSyncService(req.redisClient, req.pgStore, req.qdbStore, req.opensearch, req.log)
 
 router.post(
   '/sync/members',
   asyncWrap(async (req: ApiRequest, res) => {
-    const memberSyncService = new MemberSyncService(
-      req.redisClient,
-      req.dbStore,
-      req.opensearch,
-      req.log,
-      serviceConfig,
-    )
+    const memberSyncService = syncService(req)
 
-    const { memberIds } = req.body
+    const { memberId, withAggs } = req.body
     try {
-      req.log.trace(`Calling memberSyncService.syncMembers for ${memberIds}`)
-      await memberSyncService.syncMembers(memberIds)
+      req.log.trace(`Calling memberSyncService.syncMembers for ${memberId}`)
+      await memberSyncService.syncMembers(memberId, { withAggs })
       res.sendStatus(200)
     } catch (error) {
+      req.log.error(error)
       res.status(500).send(error.message)
     }
   }),
@@ -32,13 +28,7 @@ router.post(
 router.post(
   '/sync/tenant/members',
   asyncWrap(async (req: ApiRequest, res) => {
-    const memberSyncService = new MemberSyncService(
-      req.redisClient,
-      req.dbStore,
-      req.opensearch,
-      req.log,
-      serviceConfig,
-    )
+    const memberSyncService = syncService(req)
 
     const { tenantId } = req.body
     try {
@@ -46,6 +36,7 @@ router.post(
       await memberSyncService.syncTenantMembers(tenantId)
       res.sendStatus(200)
     } catch (error) {
+      req.log.error(error)
       res.status(500).send(error.message)
     }
   }),
@@ -54,13 +45,7 @@ router.post(
 router.post(
   '/sync/organization/members',
   asyncWrap(async (req: ApiRequest, res) => {
-    const memberSyncService = new MemberSyncService(
-      req.redisClient,
-      req.dbStore,
-      req.opensearch,
-      req.log,
-      serviceConfig,
-    )
+    const memberSyncService = syncService(req)
 
     const { organizationId } = req.body
     try {
@@ -70,6 +55,7 @@ router.post(
       await memberSyncService.syncOrganizationMembers(organizationId)
       res.sendStatus(200)
     } catch (error) {
+      req.log.error(error)
       res.status(500).send(error.message)
     }
   }),
@@ -78,13 +64,7 @@ router.post(
 router.post(
   '/cleanup/tenant/members',
   asyncWrap(async (req: ApiRequest, res) => {
-    const memberSyncService = new MemberSyncService(
-      req.redisClient,
-      req.dbStore,
-      req.opensearch,
-      req.log,
-      serviceConfig,
-    )
+    const memberSyncService = syncService(req)
 
     const { tenantId } = req.body
     try {
@@ -92,6 +72,7 @@ router.post(
       await memberSyncService.cleanupMemberIndex(tenantId)
       res.sendStatus(200)
     } catch (error) {
+      req.log.error(error)
       res.status(500).send(error.message)
     }
   }),
@@ -100,13 +81,7 @@ router.post(
 router.post(
   '/cleanup/member',
   asyncWrap(async (req: ApiRequest, res) => {
-    const memberSyncService = new MemberSyncService(
-      req.redisClient,
-      req.dbStore,
-      req.opensearch,
-      req.log,
-      serviceConfig,
-    )
+    const memberSyncService = syncService(req)
 
     const { memberId } = req.body
     try {
@@ -114,6 +89,7 @@ router.post(
       await memberSyncService.removeMember(memberId)
       res.sendStatus(200)
     } catch (error) {
+      req.log.error(error)
       res.status(500).send(error.message)
     }
   }),

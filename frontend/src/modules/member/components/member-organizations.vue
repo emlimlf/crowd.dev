@@ -14,16 +14,20 @@
         @click.stop
       >
         <div v-if="activeOrganization.logo">
-          <div class="w-5 h-5 mr-1">
+          <div class="w-5 h-5 mr-2 outline outline-1 outline-gray-200 rounded">
             <img :src="activeOrganization.logo" alt="Logo" />
           </div>
         </div>
-        <div class="max-w-full">
+        <div class="flex items-center gap-1">
           <p
-            class="text-gray-900 text-sm text-ellipsis truncate hover:text-brand-500 transition leading-relaxed"
+            class="text-gray-900 text-xs hover:text-primary-500 transition leading-relaxed line-clamp-2 word-break"
           >
             {{ activeOrganization.displayName || activeOrganization.name || '-' }}
           </p>
+          <lf-organization-lf-member-tag
+            :organization="activeOrganization"
+            :only-show-icon="true"
+          />
         </div>
       </router-link>
       <div
@@ -99,6 +103,10 @@
         <span class="text-xs">{{
           activeOrganization.displayName || activeOrganization.name || '-'
         }}</span>
+        <lf-organization-lf-member-tag
+          :organization="activeOrganization"
+          :only-show-icon="true"
+        />
       </router-link>
     </div>
   </div>
@@ -111,6 +119,7 @@
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
+import LfOrganizationLfMemberTag from '@/modules/organization/components/lf-member/organization-lf-member-tag.vue';
 
 const props = defineProps({
   member: {
@@ -151,7 +160,7 @@ const activeOrganization = computed(() => {
     .filter((organization) => !!organization.memberOrganizations?.dateStart && !organization.memberOrganizations?.dateEnd);
 
   // Return the most recent organization, comparing the startDate
-  return completeOrganizations.reduce((mostRecent, organization) => {
+  const mostRecent = completeOrganizations.reduce((mostRecent, organization) => {
     const mostRecentStartDate = new Date(mostRecent.memberOrganizations?.dateStart);
     const organizationStartDate = new Date(organization.memberOrganizations?.dateStart);
 
@@ -161,6 +170,12 @@ const activeOrganization = computed(() => {
 
     return mostRecent;
   }, completeOrganizations.length ? completeOrganizations[0] : null);
+
+  if (mostRecent) {
+    return mostRecent;
+  }
+
+  return organizations[0];
 });
 </script>
 

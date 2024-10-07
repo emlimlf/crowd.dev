@@ -17,6 +17,7 @@ export default {
   connectComponent: GitConnect,
   url: () => null,
   showProfileLink: false,
+  placeholder: 'Git email address',
   chartColor: '#E5512C',
   activityDisplay: {
     showContentDetails: true,
@@ -33,8 +34,5 @@ export default {
       insertions: attributes.insertions,
       deletions: attributes.deletions,
     }),
-  },
-  organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
   },
 };

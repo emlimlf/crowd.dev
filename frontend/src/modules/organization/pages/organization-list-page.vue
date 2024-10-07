@@ -2,7 +2,7 @@
   <app-page-wrapper size="full-width">
     <div class="member-list-page">
       <div class="mb-10">
-        <app-lf-page-header text-class="text-sm text-brand-600 mb-2.5" />
+        <app-lf-page-header text-class="text-sm text-primary-600 mb-2.5" />
         <div class="flex items-center justify-between">
           <div class="flex items-center">
             <h4>Organizations</h4>
@@ -12,13 +12,12 @@
               v-if="organizationsToMergeCount > 0"
               content="Coming soon"
               placement="top"
-              :disabled="hasPermissionsToMerge"
+              :disabled="hasPermission(LfPermission.mergeOrganizations)"
             >
               <span>
                 <component
-                  :is="hasPermissionsToMerge ? 'router-link' : 'span'"
+                  :is="hasPermission(LfPermission.mergeOrganizations) ? 'router-link' : 'span'"
                   class=" mr-4 "
-                  :class="{ 'pointer-events-none': isEditLockedForSampleData }"
                   :to="{
                     name: 'organizationMergeSuggestions',
                     query: {
@@ -27,7 +26,7 @@
                   }"
                 >
                   <button
-                    :disabled="isEditLockedForSampleData"
+                    :disabled="!hasPermission(LfPermission.mergeOrganizations)"
                     type="button"
                     class="btn btn--secondary btn--md flex items-center"
                   >
@@ -35,39 +34,34 @@
                     <span class="text-gray-900">Merge suggestions</span>
                     <span
                       v-if="organizationsToMergeCount > 0"
-                      class="ml-2 bg-brand-100 text-brand-500 py-px px-1.5 leading-5 rounded-full font-semibold"
+                      class="ml-2 bg-primary-100 text-primary-500 py-px px-1.5 leading-5 rounded-full font-semibold"
                     >{{ Math.ceil(organizationsToMergeCount) }}</span>
                   </button>
                 </component>
               </span>
             </el-tooltip>
             <el-button
-              v-if="hasPermissionToCreate"
+              v-if="hasPermission(LfPermission.organizationCreate)"
               class="btn btn--primary btn--md"
-              :class="{
-                'pointer-events-none cursor-not-allowed':
-                  isCreateLockedForSampleData,
-              }"
-              :disabled="isCreateLockedForSampleData"
-              @click="onAddOrganization"
+              @click="organizationCreate = true"
             >
               Add organization
             </el-button>
           </div>
         </div>
         <div class="text-xs text-gray-500">
-          Overview of all organizations that relate to your product or community
+          List of all the organizations that relate to {{ selectedProjectGroup?.name }} projects
         </div>
       </div>
 
-      <cr-saved-views
+      <lf-saved-views
         v-model="filters"
         :config="organizationSavedViews"
         :filters="organizationFilters"
         placement="organization"
         @update:model-value="organizationFilter.alignFilterList($event)"
       />
-      <cr-filter
+      <lf-filter
         ref="organizationFilter"
         v-model="filters"
         :config="organizationFilters"
@@ -79,32 +73,23 @@
         v-model:pagination="pagination"
         :has-organizations="totalOrganizations > 0"
         :is-page-loading="loading"
+        :is-table-loading="tableLoading"
         @update:pagination="onPaginationChange"
         @on-add-organization="isSubProjectSelectionOpen = true"
       />
     </div>
   </app-page-wrapper>
 
-  <app-lf-sub-projects-list-modal
-    v-if="isSubProjectSelectionOpen"
-    v-model="isSubProjectSelectionOpen"
-    title="Add organization"
-    @on-submit="onSubProjectSelection"
-  />
+  <lf-organization-add v-if="organizationCreate" v-model="organizationCreate" />
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { onMounted, ref } from 'vue';
 import AppPageWrapper from '@/shared/layout/page-wrapper.vue';
 import AppOrganizationListTable from '@/modules/organization/components/list/organization-list-table.vue';
-import {
-  mapGetters,
-} from '@/shared/vuex/vuex.helpers';
 import AppLfPageHeader from '@/modules/lf/layout/components/lf-page-header.vue';
-import AppLfSubProjectsListModal from '@/modules/lf/segments/components/lf-sub-projects-list-modal.vue';
-import CrSavedViews from '@/shared/modules/saved-views/components/SavedViews.vue';
-import CrFilter from '@/shared/modules/filters/components/Filter.vue';
+import LfSavedViews from '@/shared/modules/saved-views/components/SavedViews.vue';
+import LfFilter from '@/shared/modules/filters/components/Filter.vue';
 import { useOrganizationStore } from '@/modules/organization/store/pinia';
 import { storeToRefs } from 'pinia';
 import { organizationFilters, organizationSearchFilter } from '@/modules/organization/config/filters/main';
@@ -112,64 +97,33 @@ import { organizationSavedViews } from '@/modules/organization/config/saved-view
 import { FilterQuery } from '@/shared/modules/filters/types/FilterQuery';
 import { OrganizationService } from '@/modules/organization/organization-service';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
-import { OrganizationPermissions } from '../organization-permissions';
-
-const router = useRouter();
-
-const { currentUser, currentTenant } = mapGetters('auth');
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
+import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
+import LfOrganizationAdd from '@/modules/organization/components/edit/organization-add.vue';
+import allOrganizations from '@/modules/organization/config/saved-views/views/all-organizations';
 
 const organizationStore = useOrganizationStore();
 const { filters, totalOrganizations, savedFilterBody } = storeToRefs(organizationStore);
 const { fetchOrganizations } = organizationStore;
 
 const loading = ref(true);
-const organizationCount = ref(0);
+const tableLoading = ref(true);
 const isSubProjectSelectionOpen = ref(false);
+const organizationCreate = ref(false);
 
-const organizationFilter = ref<CrFilter | null>(null);
+const organizationFilter = ref<LfFilter | null>(null);
 const lsSegmentsStore = useLfSegmentsStore();
 
 const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
 
-const hasPermissionToCreate = computed(
-  () => new OrganizationPermissions(
-    currentTenant.value,
-    currentUser.value,
-  ).create,
-);
-const isCreateLockedForSampleData = computed(
-  () => new OrganizationPermissions(
-    currentTenant.value,
-    currentUser.value,
-  ).createLockedForSampleData,
-);
-
-const isEditLockedForSampleData = computed(
-  () => new OrganizationPermissions(
-    currentTenant.value,
-    currentUser.value,
-  ).editLockedForSampleData,
-);
-
-const hasPermissionsToMerge = computed(() => new OrganizationPermissions(
-  currentTenant.value,
-  currentUser.value,
-)?.mergeOrganizations);
+const { hasPermission } = usePermissions();
 
 const pagination = ref({
   page: 1,
   perPage: 20,
 });
 
-const doGetOrganizationCount = () => {
-  (OrganizationService.query({
-    limit: 1,
-    offset: 0,
-  }) as Promise<any>)
-    .then(({ count }) => {
-      organizationCount.value = count;
-    });
-};
+filters.value = { ...allOrganizations.config };
 
 const showLoading = (filter: any, body: any): boolean => {
   const saved: any = { ...savedFilterBody.value };
@@ -186,6 +140,8 @@ const showLoading = (filter: any, body: any): boolean => {
 const fetch = ({
   filter, orderBy, body,
 }: FilterQuery) => {
+  console.log('fetch', filter, orderBy, body);
+
   if (!loading.value) {
     loading.value = showLoading(filter, body);
   }
@@ -199,6 +155,7 @@ const fetch = ({
     },
   })
     .finally(() => {
+      tableLoading.value = false;
       loading.value = false;
     });
 };
@@ -206,40 +163,30 @@ const fetch = ({
 const onPaginationChange = ({
   page, perPage,
 }: FilterQuery) => {
+  tableLoading.value = true;
   fetchOrganizations({
     reload: true,
     body: {
       offset: (page - 1) * perPage || 0,
       limit: perPage || 20,
     },
+  }).finally(() => {
+    tableLoading.value = false;
   });
 };
 
 const organizationsToMergeCount = ref(0);
 const fetchOrganizationsToMergeCount = () => {
-  OrganizationService.fetchMergeSuggestions(1, 0)
+  OrganizationService.fetchMergeSuggestions(0, 0, {
+    countOnly: true,
+  })
     .then(({ count }: any) => {
       organizationsToMergeCount.value = count;
     });
 };
 
 onMounted(async () => {
-  doGetOrganizationCount();
   fetchOrganizationsToMergeCount();
   (window as any).analytics.page('Organization');
 });
-
-const onAddOrganization = () => {
-  isSubProjectSelectionOpen.value = true;
-};
-
-const onSubProjectSelection = (subprojectId) => {
-  isSubProjectSelectionOpen.value = false;
-  router.push({
-    name: 'organizationCreate',
-    query: {
-      subprojectId,
-    },
-  });
-};
 </script>

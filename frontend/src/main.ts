@@ -5,7 +5,6 @@ import VueGridLayout from 'vue-grid-layout';
 // @ts-ignore
 import Vue3Sanitize from 'vue-3-sanitize';
 import LogRocketClient from 'logrocket';
-import VNetworkGraph from 'v-network-graph';
 import VueLazyLoad from 'vue3-lazyload';
 import { createPinia } from 'pinia';
 import { createRouter } from '@/router';
@@ -16,14 +15,17 @@ import config from '@/config';
 
 import { init as i18nInit } from '@/i18n';
 
-import { AuthService } from '@/modules/auth/auth-service';
-import { AuthToken } from '@/modules/auth/auth-token';
-import 'v-network-graph/lib/style.css';
-
 import App from '@/app.vue';
 import { vueSanitizeOptions } from '@/plugins/sanitize';
 import marked from '@/plugins/marked';
 import { useLogRocket } from '@/utils/logRocket';
+import { initRUM } from '@/utils/datadog/rum';
+
+declare module 'vue' {
+  interface ComponentCustomProperties {
+    $sanitize: (key: string) => string;
+  }
+}
 
 i18nInit();
 /**
@@ -40,13 +42,6 @@ i18nInit();
   const store = await createStore(LogRocketClient);
 
   app.use(pinia);
-
-  const isSocialOnboardRequested = AuthService.isSocialOnboardRequested();
-
-  AuthToken.applyFromLocationUrlIfExists();
-  if (isSocialOnboardRequested) {
-    await AuthService.socialOnboard();
-  }
 
   app.use(VueGridLayout);
   app.use(Vue3Sanitize, vueSanitizeOptions);
@@ -74,7 +69,6 @@ i18nInit();
     });
 
   Object.values(plugins).map((plugin) => app.use(plugin));
-  app.use(VNetworkGraph);
 
   app.use(store).use(router).mount('#app');
 
@@ -113,5 +107,9 @@ i18nInit();
       'https://static.hotjar.com/c/hotjar-',
       '.js?sv=',
     ));
+  }
+
+  if (config.env === 'production' && config.datadog.rum) {
+    initRUM();
   }
 }());

@@ -1,343 +1,339 @@
 <template>
-  <app-page-wrapper size="narrow">
-    <router-link
-      class="text-gray-600 btn-link--md btn-link--secondary p-0 inline-flex items-center mt-1 mb-4"
-      :to="{
-        path: '/contributors',
-        query: { projectGroup: selectedProjectGroup?.id },
-      }"
-    >
-      <i class="ri-arrow-left-s-line mr-2" />Contributors
-    </router-link>
-    <h4 class="text-xl font-semibold leading-9 mb-1">
-      Merging suggestions
-    </h4>
-    <div class="text-xs text-gray-600 pb-6">
-      LFX is constantly checking your community for duplicate contributors.
-      Here you can check all the merging suggestions.
-    </div>
-
-    <div v-if="loading || count > 0" class="panel !p-0">
-      <!-- Header -->
-      <header class="flex items-center justify-between px-6 py-5 border-b">
-        <div class="flex items-center">
-          <button
-            type="button"
-            class="btn btn-link btn-link--md btn-link--primary"
-            :disabled="loading || offset <= 0"
-            @click="fetch(offset - 1)"
-          >
-            <span class="ri-arrow-left-s-line text-lg mr-2" />
-            <span>Previous</span>
-          </button>
-          <app-loading v-if="loading" height="16px" width="131px" radius="3px" />
-          <div
-            v-else
-            class="text-sm leading-5 text-gray-500 flex flex-wrap justify-center px-4"
-          >
-            <div>{{ offset + 1 }} of {{ Math.ceil(count) }} suggestions</div>
-          </div>
-          <button
-            type="button"
-            class="btn btn-link btn-link--md btn-link--primary"
-            :disabled="loading || offset >= count - 1"
-            @click="fetch(offset + 1)"
-          >
-            <span>Next</span>
-            <span class="ri-arrow-right-s-line text-lg ml-2" />
-          </button>
-        </div>
-        <div class="flex items-center">
-          <div
-            v-if="!loading && membersToMerge.similarity"
-            class="w-full flex items-center justify-center pr-3"
-          >
-            <div
-              class="flex text-sm"
-              :style="{
-                color: confidence.color,
-              }"
-            >
-              <div class="pr-1" v-html="confidence.svg" />
-              {{ Math.round(membersToMerge.similarity * 100) }}% confidence
-            </div>
-          </div>
-          <el-button
-            :disabled="loading || isEditLockedForSampleData"
-            class="btn btn--secondary btn--md"
-            :loading="sendingIgnore"
-            @click="ignoreSuggestion()"
-          >
-            Ignore suggestion
-          </el-button>
-          <el-button
-            :disabled="loading || isEditLockedForSampleData"
-            class="btn btn--primary btn--md !ml-4"
-            :loading="sendingMerge"
-            @click="mergeSuggestion()"
-          >
-            Merge contributors
-          </el-button>
-        </div>
-      </header>
-
-      <!-- Comparison -->
-      <!-- Loading -->
-      <div v-if="loading" class="flex p-5">
-        <div class="w-1/3 border rounded-l-lg">
-          <app-member-merge-suggestions-details
-            :member="null"
-            :loading="true"
-            :is-primary="true"
-          />
-        </div>
-        <div class="w-1/3 -ml-px border rounded-r-lg">
-          <app-member-merge-suggestions-details
-            :member="null"
-            :loading="true"
-          />
-        </div>
-        <div class="w-1/3 ml-8 border rounded-lg bg-brand-25">
-          <app-member-merge-suggestions-details
-            :member="null"
-            :loading="true"
-          />
-        </div>
-      </div>
-      <div v-else class="flex p-5">
-        <div
-          v-for="(member, mi) of membersToMerge.members"
-          :key="member.id"
-          class="w-1/3"
+  <app-page-wrapper>
+    <div>
+      <app-back-link
+        :default-route="{
+          path: '/people',
+          query: { projectGroup: selectedProjectGroup?.id },
+        }"
+        class="font-semibold"
+      >
+        <template #default>
+          People
+        </template>
+      </app-back-link>
+      <div class="flex items-center pb-6">
+        <h4 class="text-xl font-semibold leading-9">
+          Merge suggestions <span v-if="totalCount" class="font-light text-gray-500">({{ totalCount }})</span>
+        </h4>
+        <el-tooltip
+          placement="top"
+          content="LFX is constantly checking your community for duplicate profiles. Here you can check all the merging suggestions."
         >
-          <app-member-merge-suggestions-details
-            :member="member"
-            :compare-member="
-              membersToMerge[(mi + 1) % membersToMerge.members.length]
-            "
-            :is-primary="mi === primary"
-            :extend-bio="bioHeight"
-            class="border"
-            :class="mi > 0 ? 'rounded-r-lg -ml-px' : 'rounded-l-lg'"
-            @make-primary="primary = mi"
-            @bio-height="$event > bioHeight ? (bioHeight = $event) : null"
-          />
-        </div>
-        <div class="w-1/3 ml-8">
-          <app-member-merge-suggestions-details
-            :member="preview"
-            :is-preview="true"
-            class="border rounded-lg bg-brand-25"
-          />
-        </div>
+          <i class="ri-question-line text-lg text-gray-400 flex items-center ml-2 h-5" />
+        </el-tooltip>
       </div>
-      <!-- Actions -->
-    </div>
-    <!-- Empty state -->
-    <div v-else class="pt-20 flex flex-col items-center">
+      <app-merge-suggestions-filters placeholder="Search people" @search="search" />
       <div
-        class="ri-shuffle-line text-gray-200 text-10xl h-40 flex items-center mb-8"
-      />
-      <h5 class="text-center text-lg font-semibold mb-4">
-        No merge suggestions
-      </h5>
-      <p class="text-sm text-center text-gray-600 leading-5">
-        We couldn’t find any duplicated contributors
-      </p>
+        v-if="page <= 1 && loading && mergeSuggestions.length === 0"
+        class="flex justify-center pt-8"
+      >
+        <lf-spinner />
+      </div>
+      <lf-table v-else-if="mergeSuggestions.length > 0" class="mt-6">
+        <thead>
+          <tr>
+            <lf-table-head colspan="2">
+              People
+            </lf-table-head>
+            <lf-table-head v-model="sorting" property="similarity" @update:model-value="() => loadMergeSuggestions(true)">
+              Confidence level
+            </lf-table-head>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(suggestion, si) of mergeSuggestions" :key="si">
+            <td>
+              <div class="flex items-center">
+                <router-link
+                  :to="{
+                    name: 'memberView',
+                    params: { id: suggestion.members[0].id },
+                    query: { projectGroup: selectedProjectGroup?.id },
+                  }"
+                  target="_blank"
+                  class="text-black hover:text-primary-500"
+                >
+                  <div class="flex items-center gap-2">
+                    <app-avatar
+                      :entity="suggestion.members[0]"
+                      size="xs"
+                    />
+                    <p class="text-xs leading-5 font-semibold truncate max-w-3xs">
+                      {{ suggestion.members[0].displayName }}
+                    </p>
+                  </div>
+                </router-link>
+              </div>
+            </td>
+            <td>
+              <div class="flex items-center">
+                <router-link
+                  :to="{
+                    name: 'memberView',
+                    params: { id: suggestion.members[1].id },
+                    query: { projectGroup: selectedProjectGroup?.id },
+                  }"
+                  target="_blank"
+                  class="text-black hover:text-primary-500"
+                >
+                  <div class="flex items-center gap-2">
+                    <i class="text-xl ri-subtract-line text-gray-300" />
+                    <app-avatar
+                      :entity="suggestion.members[1]"
+                      size="xs"
+                    />
+                    <p class="text-xs leading-5 font-semibold truncate max-w-3xs">
+                      {{ suggestion.members[1].displayName }}
+                    </p>
+                  </div>
+                </router-link>
+              </div>
+            </td>
+            <td>
+              <app-member-merge-similarity :similarity="suggestion.similarity" />
+            </td>
+            <td class="w-48">
+              <div class="flex justify-end items-center gap-3">
+                <lf-button size="small" type="primary-ghost" @click="openDetails(si)">
+                  View suggestion
+                </lf-button>
+                <lf-dropdown placement="bottom-end" width="15rem">
+                  <template #trigger>
+                    <lf-button
+                      size="small"
+                      type="secondary-ghost-light"
+                      :loading="sending === `${suggestion.members[0].id}:${suggestion.members[1].id}`"
+                      :icon-only="true"
+                    >
+                      <i class="ri-more-fill" />
+                    </lf-button>
+                  </template>
+
+                  <lf-dropdown-item @click="merge(suggestion)">
+                    <i class="ri-shuffle-line" /> Merge suggestion
+                  </lf-dropdown-item>
+
+                  <lf-dropdown-item @click="ignore(suggestion)">
+                    <i class="ri-close-circle-line" />Ignore suggestion
+                  </lf-dropdown-item>
+                </lf-dropdown>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </lf-table>
+      <div v-else class="py-20 flex flex-col items-center">
+        <div
+          class="ri-shuffle-line text-gray-200 text-10xl h-40 flex items-center mb-8"
+        />
+        <h5 class="text-center text-lg font-semibold mb-4">
+          No merge suggestions
+        </h5>
+        <p class="text-sm text-center text-gray-600 leading-5">
+          We couldn't find any duplicated profiles
+        </p>
+      </div>
+
+      <div v-if="total > mergeSuggestions.length" class="mt-6 flex justify-center">
+        <lf-button type="primary-ghost" size="small" :loading="loading" @click="loadMore()">
+          <i class="ri-arrow-down-line" />Load more
+        </lf-button>
+      </div>
     </div>
   </app-page-wrapper>
+  <app-member-merge-suggestions-dialog
+    v-model="isModalOpen"
+    :offset="detailsOffset"
+    :query="{
+      filter,
+      orderBy: [sorting, 'activityCount_DESC'],
+    }"
+    @reload="reload()"
+  />
 </template>
 
-<script setup>
-import {
-  ref, onMounted, computed,
-} from 'vue';
-import Message from '@/shared/message/message';
-import { mapGetters } from '@/shared/vuex/vuex.helpers';
-import AppLoading from '@/shared/loading/loading-placeholder.vue';
-import AppMemberMergeSuggestionsDetails from '@/modules/member/components/suggestions/member-merge-suggestions-details.vue';
-import { useRoute } from 'vue-router';
+<script setup lang="ts">
+import AppBackLink from '@/shared/modules/back-link/components/back-link.vue';
+import LfTable from '@/ui-kit/table/Table.vue';
+import { MemberService } from '@/modules/member/member-service';
+import { onMounted, ref } from 'vue';
+import AppAvatar from '@/shared/avatar/avatar.vue';
+import LfButton from '@/ui-kit/button/Button.vue';
+import AppMemberMergeSimilarity from '@/modules/member/components/suggestions/member-merge-similarity.vue';
 import { storeToRefs } from 'pinia';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
-import { merge } from 'lodash';
+import LfDropdown from '@/ui-kit/dropdown/Dropdown.vue';
+import LfDropdownItem from '@/ui-kit/dropdown/DropdownItem.vue';
+import AppMemberMergeSuggestionsDialog from '@/modules/member/components/member-merge-suggestions-dialog.vue';
 import useMemberMergeMessage from '@/shared/modules/merge/config/useMemberMergeMessage';
-import { MemberService } from '../member-service';
-import { MemberPermissions } from '../member-permissions';
+import Message from '@/shared/message/message';
+import LfSpinner from '@/ui-kit/spinner/Spinner.vue';
+import AppMergeSuggestionsFilters from '@/modules/member/components/suggestions/merge-suggestions-filters.vue';
+import LfTableHead from '@/ui-kit/table/TableHead.vue';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
 
-const lsSegmentsStore = useLfSegmentsStore();
-const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
+const { selectedProjectGroup } = storeToRefs(useLfSegmentsStore());
 
-const { currentTenant, currentUser } = mapGetters('auth');
+const mergeSuggestions = ref<any[]>([]);
 
-const route = useRoute();
+const isModalOpen = ref<boolean>(false);
 
-const membersToMerge = ref([]);
-const primary = ref(0);
-const offset = ref(0);
-const count = ref(0);
-const loading = ref(false);
+const total = ref<number>(0);
+const limit = ref<number>(10);
+const page = ref<number>(1);
+const loading = ref<boolean>(false);
+const sorting = ref<string>('similarity_DESC');
+const totalCount = ref<number>(0);
 
-const sendingIgnore = ref(false);
-const sendingMerge = ref(false);
+const filter = ref<any>(undefined);
 
-const bioHeight = ref(0);
+const { trackEvent } = useProductTracking();
 
-const isEditLockedForSampleData = computed(
-  () => new MemberPermissions(currentTenant.value, currentUser.value)
-    .editLockedForSampleData,
-);
-
-const clearMember = (member) => {
-  const cleanedMember = { ...member };
-  // eslint-disable-next-line no-restricted-syntax
-  for (const key in cleanedMember.attributes) {
-    if (!cleanedMember.attributes[key].default) {
-      delete cleanedMember.attributes[key];
-    }
+const loadMergeSuggestions = (sort: boolean = false) => {
+  if (sort) {
+    trackEvent({
+      key: FeatureEventKey.SORT_MEMBERS_MERGE_SUGGESTIONS,
+      type: EventType.FEATURE,
+      properties: {
+        orderBy: [sorting.value, 'activityCount_DESC'],
+      },
+    });
   }
-  return cleanedMember;
-};
 
-const preview = computed(() => {
-  const primaryMember = membersToMerge.value.members[primary.value];
-  const secondaryMember = membersToMerge.value.members[(primary.value + 1) % 2];
-  const mergedMembers = merge({}, clearMember(secondaryMember), clearMember(primaryMember));
-  Object.keys(mergedMembers?.username || {}).forEach((key) => {
-    if (!primaryMember.username[key] || !secondaryMember.username[key]) {
-      return;
-    }
-    mergedMembers.username[key] = [...Object.values(primaryMember.username[key]), ...Object.values(secondaryMember.username[key])];
-  });
-  mergedMembers.score = Math.max(primaryMember.score, secondaryMember.score);
-  return mergedMembers;
-});
-
-const confidence = computed(() => {
-  if (membersToMerge.value.similarity >= 0.8) {
-    return {
-      color: '#059669',
-      svg: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M14.1667 2.66699H17.5V17.5003H14.1667V2.66699ZM8.33337 7.5H11.6667V17.5003H8.33337V7.5Z" fill="#059669"/>
-<path d="M2.5 12H5.83333V17.5H2.5V12Z" fill="#059669"/>
-</svg>`,
-    };
-  }
-  if (membersToMerge.value.similarity >= 0.6) {
-    return {
-      color: '#3B82F6',
-      svg: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M14.1666 2.66699H17.4999V17.5003H14.1666V2.66699ZM8.33325 7.5H11.6666V17.5003H8.33325V7.5Z" fill="#D1D5DB"/>
-<path d="M8.33325 7.5H11.6666V17.5003H8.33325V7.5Z" fill="#3B82F6"/>
-<path d="M2.5 12H5.83333V17.5H2.5V12Z" fill="#3B82F6"/>
-</svg>`,
-    };
-  }
-  return {
-    color: '#D97706',
-    svg: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M14.1667 2.66699H17.5V17.5003H14.1667V2.66699ZM8.33337 7.5H11.6667V17.5003H8.33337V7.5Z" fill="#D1D5DB"/>
-<path d="M2.5 12H5.83333V17.5H2.5V12Z" fill="#F59E0B"/>
-</svg>`,
-  };
-});
-
-const fetch = (page) => {
-  if (page > -1) {
-    offset.value = page;
-  }
   loading.value = true;
-
-  MemberService.fetchMergeSuggestions(1, offset.value, route.query ?? {})
+  MemberService.fetchMergeSuggestions(limit.value, (page.value - 1) * limit.value, {
+    filter: filter.value,
+    orderBy: [sorting.value, 'activityCount_DESC'],
+    detail: false,
+  })
     .then((res) => {
-      offset.value = +res.offset;
-      count.value = res.count;
-      [membersToMerge.value] = res.rows;
-
-      const { members } = membersToMerge.value;
-
-      primary.value = 0;
-
-      // Set member with maximum identities and activities as primary
-      if (members.length >= 2 && ((members[0].identities.length < members[1].identities.length)
-        || (members[0].activityCount < members[1].activityCount))) {
-        membersToMerge.value.members.reverse();
+      total.value = +res.count;
+      const rows = res.rows.filter((s: any) => s.similarity > 0);
+      if (+res.offset > 0) {
+        mergeSuggestions.value = [...mergeSuggestions.value, ...rows];
+      } else {
+        mergeSuggestions.value = rows;
       }
-    })
-    .catch(() => {
-      Message.error(
-        'There was an error fetching merge suggestion, please try again later',
-      );
     })
     .finally(() => {
       loading.value = false;
     });
 };
 
-const ignoreSuggestion = () => {
-  if (sendingIgnore.value || sendingMerge.value || loading.value) {
-    return;
-  }
-  sendingIgnore.value = true;
-  MemberService.addToNoMerge(...membersToMerge.value.members)
-    .then(() => {
-      Message.success('Merging suggestion ignored successfuly');
-      fetch();
-    })
-    .catch((error) => {
-      if (error.response.status === 404) {
-        Message.error('Suggestion already merged or ignored', {
-          message: `Sorry, the suggestion you are trying to merge might have already been merged or ignored.
-          Please refresh to see the updated information.`,
-        });
-      } else {
-        Message.error('There was an error ignoring the merging suggestion');
-      }
-    })
-    .finally(() => {
-      sendingIgnore.value = false;
+const getTotalCount = () => {
+  MemberService.fetchMergeSuggestions(0, 0, {
+    countOnly: true,
+  })
+    .then(({ count }) => {
+      totalCount.value = count;
     });
 };
 
-const mergeSuggestion = () => {
-  if (sendingIgnore.value || sendingMerge.value || loading.value) {
+const detailsOffset = ref<number>(0);
+
+const openDetails = (index: number) => {
+  trackEvent({
+    key: FeatureEventKey.VIEW_MEMBER_MERGE_SUGGESTION,
+    type: EventType.FEATURE,
+    properties: {
+      similarity: mergeSuggestions.value[index].similarity,
+    },
+  });
+
+  detailsOffset.value = index;
+  isModalOpen.value = true;
+};
+
+const search = (query: any) => {
+  page.value = 1;
+  filter.value = query;
+  loadMergeSuggestions();
+};
+
+const reload = () => {
+  page.value = 1;
+  getTotalCount();
+  loadMergeSuggestions();
+};
+
+const loadMore = () => {
+  page.value += 1;
+  loadMergeSuggestions();
+};
+
+const sending = ref<string>('');
+
+const merge = (suggestion: any) => {
+  if (sending.value.length) {
     return;
   }
 
-  sendingMerge.value = true;
+  trackEvent({
+    key: FeatureEventKey.MERGE_MEMBER_MERGE_SUGGESTION,
+    type: EventType.FEATURE,
+    properties: {
+      similarity: suggestion.similarity,
+    },
+  });
 
-  const primaryMember = membersToMerge.value.members[primary.value];
-  const secondaryMember = membersToMerge.value.members[(primary.value + 1) % 2];
+  const primaryMember = suggestion.members[0];
+  const secondaryMember = suggestion.members[1];
+  sending.value = `${primaryMember.id}:${secondaryMember.id}`;
 
-  const { loadingMessage, successMessage, apiErrorMessage } = useMemberMergeMessage;
+  const { loadingMessage } = useMemberMergeMessage;
 
   loadingMessage();
 
   MemberService.merge(primaryMember, secondaryMember)
     .then(() => {
-      primary.value = 0;
-
-      successMessage({
-        primaryMember,
-        secondaryMember,
-        selectedProjectGroupId: selectedProjectGroup.value?.id,
-      });
-
-      fetch();
-    })
-    .catch((error) => {
-      apiErrorMessage({ error });
+      Message.closeAll();
+      Message.info(
+        "We're finalizing profiles merging. We will let you know once the process is completed.",
+        {
+          title: 'Profiles merging in progress',
+        },
+      );
     })
     .finally(() => {
-      sendingMerge.value = false;
+      reload();
+      sending.value = '';
     });
 };
 
-onMounted(async () => {
-  fetch(0);
+const ignore = (suggestion: any) => {
+  if (sending.value.length) {
+    return;
+  }
+
+  trackEvent({
+    key: FeatureEventKey.IGNORE_MEMBER_MERGE_SUGGESTION,
+    type: EventType.FEATURE,
+    properties: {
+      similarity: suggestion.similarity,
+    },
+  });
+
+  const primaryMember = suggestion.members[0];
+  const secondaryMember = suggestion.members[1];
+  sending.value = `${primaryMember.id}:${secondaryMember.id}`;
+  MemberService.addToNoMerge(...suggestion.members)
+    .then(() => {
+      Message.success('Merging suggestion ignored successfully');
+      reload();
+    })
+    .finally(() => {
+      sending.value = '';
+    });
+};
+
+onMounted(() => {
+  getTotalCount();
 });
 </script>
 
-<script>
+<script lang="ts">
 export default {
   name: 'AppMemberMergeSuggestionsPage',
 };

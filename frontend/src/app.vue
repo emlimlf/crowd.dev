@@ -1,18 +1,10 @@
 <template>
   <div id="app">
     <div class="sm:hidden md:block lg:block xl:block">
-      <lfx-header-v2 v-if="showLfxMenu" id="lfx-header" product="Community Management" />
-      <div v-if="loading" class="flex items-center bg-white h-screen w-screen justify-center">
-        <div
-          v-loading="true"
-          class="app-page-spinner h-20 w-20 !relative !min-h-20 custom"
-        />
-      </div>
-      <router-view v-show="!loading" v-slot="{ Component }">
+      <lfx-header-v2 id="lfx-header" product="Community Management" />
+      <router-view v-slot="{ Component }">
         <transition>
-          <div>
-            <component :is="Component" />
-          </div>
+          <component :is="Component" v-if="Component" />
         </transition>
       </router-view>
 
@@ -26,17 +18,15 @@
 </template>
 
 <script>
-import { mapGetters, mapActions, mapState } from 'vuex';
+import { mapActions, mapState } from 'vuex';
 import AppResizePage from '@/modules/layout/pages/resize-page.vue';
 import { FeatureFlag } from '@/utils/featureFlag';
-import config from '@/config';
-import { AuthToken } from '@/modules/auth/auth-token';
-import { Auth0Service } from '@/shared/services/auth0.service';
-import identify from '@/shared/monitoring/identify';
-import { mapActions as piniaMapActions } from 'pinia';
+import { mapActions as piniaMapActions, storeToRefs } from 'pinia';
 import { useActivityStore } from '@/modules/activity/store/pinia';
 import { useActivityTypeStore } from '@/modules/activity/store/type';
-import { TenantService } from '@/modules/tenant/tenant-service';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import useSessionTracking from '@/shared/modules/monitoring/useSessionTracking';
+import { useLfSegmentsStore } from '@/modules/lf/segments/store';
 
 export default {
   name: 'App',
@@ -45,66 +35,48 @@ export default {
     AppResizePage,
   },
 
+  setup() {
+    const authStore = useAuthStore();
+    const { detachListeners } = useSessionTracking();
+    const { listProjectGroups } = useLfSegmentsStore();
+    const { init } = authStore;
+    const { tenant, loaded } = storeToRefs(authStore);
+    return {
+      init, tenant, loaded, detachListeners, listProjectGroups,
+    };
+  },
+
   computed: {
-    ...mapGetters({
-      currentTenant: 'auth/currentTenant',
-      isAuthenticated: 'auth/isAuthenticated',
-      currentUser: 'auth/currentUser',
-    }),
     ...mapState({
       featureFlag: (state) => state.tenant.featureFlag,
     }),
-    loading() {
-      return (
-        !((this.isAuthenticated && !!AuthToken.get())
-        || (!this.featureFlag.isReady
-          && !this.featureFlag.hasError
-          && !config.isCommunityVersion))
-      );
-    },
-    showLfxMenu() {
-      return this.$route.name !== 'reportPublicView';
-    },
   },
 
   watch: {
-    isAuthenticated: {
-      async handler(value) {
-        if (value) {
-          await TenantService.fetchAndApply();
+    tenant: {
+      handler(tenant, oldTenant) {
+        if (tenant?.id && tenant.id !== oldTenant?.id) {
           this.fetchActivityTypes();
           this.fetchActivityChannels();
-
-          try {
-            const user = await Auth0Service.getUser();
-            const lfxHeader = document.getElementById('lfx-header');
-
-            if (lfxHeader) {
-              lfxHeader.authuser = user;
-            }
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      },
-    },
-    currentUser: {
-      handler(user, oldUser) {
-        if (user?.id && user.id !== oldUser?.id) {
-          identify(user);
         }
       },
     },
   },
 
   async created() {
-    FeatureFlag.init(this.currentTenant);
+    FeatureFlag.init(this.tenant);
 
     window.addEventListener('resize', this.handleResize);
     this.handleResize();
+    this.init();
+    this.listProjectGroups({
+      limit: null,
+      reset: true,
+    });
   },
 
   unmounted() {
+    this.detachListeners();
     window.removeEventListener('resize', this.handleResize);
   },
 

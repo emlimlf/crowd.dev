@@ -1,26 +1,32 @@
-import lodash from 'lodash'
-import { v4 as uuid } from 'uuid'
-import { QueryTypes } from 'sequelize'
-import { DEFAULT_ACTIVITY_TYPE_SETTINGS } from '@crowd/integrations'
+import { Error404 } from '@crowd/common'
+import {
+  buildSegmentActivityTypes,
+  findSegmentById,
+  getSegmentActivityTypes,
+  isSegmentProject,
+  isSegmentProjectGroup,
+  populateSegmentRelations,
+} from '@crowd/data-access-layer/src/segments'
 import {
   ActivityTypeSettings,
+  PageData,
+  QueryData,
   SegmentCreateData,
   SegmentData,
   SegmentLevel,
   SegmentProjectGroupNestedData,
   SegmentProjectNestedData,
-  SegmentRawData,
   SegmentStatus,
   SegmentUpdateChildrenPartialData,
   SegmentUpdateData,
-  PageData,
-  QueryData,
 } from '@crowd/types'
-import { Error404 } from '@crowd/common'
-import { IRepositoryOptions } from './IRepositoryOptions'
-import { RepositoryBase } from './repositoryBase'
+import lodash from 'lodash'
+import { QueryTypes } from 'sequelize'
+import { v4 as uuid } from 'uuid'
 import removeFieldsFromObject from '../../utils/getObjectWithoutKey'
 import IntegrationRepository from './integrationRepository'
+import { IRepositoryOptions } from './IRepositoryOptions'
+import { RepositoryBase } from './repositoryBase'
 import SequelizeRepository from './sequelizeRepository'
 
 class SegmentRepository extends RepositoryBase<
@@ -42,15 +48,16 @@ class SegmentRepository extends RepositoryBase<
   async create(data: SegmentCreateData): Promise<SegmentData> {
     const transaction = this.transaction
 
-    const segmentInsertResult = await this.options.database.sequelize.query(
-      `INSERT INTO "segments" ("id", "url", "name", "slug", "parentSlug", "grandparentSlug", "status", "parentName", "sourceId", "sourceParentId", "tenantId", "grandparentName")
+    const id = uuid()
+
+    await this.options.database.sequelize.query(
+      `INSERT INTO "segments" ("id", "url", "name", "slug", "parentSlug", "grandparentSlug", "status", "parentName", "sourceId", "sourceParentId", "tenantId", "grandparentName", "parentId", "grandparentId")
           VALUES
-              (:id, :url, :name, :slug, :parentSlug, :grandparentSlug, :status, :parentName, :sourceId, :sourceParentId, :tenantId, :grandparentName)
-          RETURNING "id"
+              (:id, :url, :name, :slug, :parentSlug, :grandparentSlug, :status, :parentName, :sourceId, :sourceParentId, :tenantId, :grandparentName, :parentId, :grandparentId)
         `,
       {
         replacements: {
-          id: uuid(),
+          id,
           url: data.url || null,
           name: data.name,
           parentName: data.parentName || null,
@@ -62,14 +69,20 @@ class SegmentRepository extends RepositoryBase<
           sourceId: data.sourceId || null,
           sourceParentId: data.sourceParentId || null,
           tenantId: this.options.currentTenant.id,
+          parentId: data.parentId || null,
+          grandparentId: data.grandparentId || null,
         },
         type: QueryTypes.INSERT,
         transaction,
       },
     )
 
-    const segment = await this.findById(segmentInsertResult[0][0].id)
+    const segment = await this.findById(id)
     return segment
+  }
+
+  public async findById(id: string): Promise<SegmentData> {
+    return findSegmentById(this.queryExecutor, id)
   }
 
   /**
@@ -84,7 +97,7 @@ class SegmentRepository extends RepositoryBase<
     segment: SegmentData,
     data: SegmentUpdateChildrenPartialData,
   ): Promise<SegmentData> {
-    if (SegmentRepository.isProjectGroup(segment)) {
+    if (isSegmentProjectGroup(segment)) {
       // update projects
       await this.updateBulk(
         (segment as SegmentProjectGroupNestedData).projects.map((p) => p.id),
@@ -103,7 +116,7 @@ class SegmentRepository extends RepositoryBase<
         grandparentSlug: data.slug,
         grandparentName: data.name,
       })
-    } else if (SegmentRepository.isProject(segment)) {
+    } else if (isSegmentProject(segment)) {
       // update subprojects
       await this.updateBulk(
         (segment as SegmentProjectNestedData).subprojects.map((sp) => sp.id),
@@ -129,6 +142,8 @@ class SegmentRepository extends RepositoryBase<
           'slug',
           'parentSlug',
           'grandparentSlug',
+          'parentId',
+          'grandparentId',
           'status',
           'parentName',
           'sourceId',
@@ -349,31 +364,6 @@ class SegmentRepository extends RepositoryBase<
     }, {})
   }
 
-  async getChildrenOfProjectGroups(segment: SegmentData) {
-    const transaction = this.transaction
-
-    const records = await this.options.database.sequelize.query(
-      `
-          SELECT *
-          FROM segments s
-          WHERE (s."grandparentSlug" = :slug OR
-                 (s."parentSlug" = :slug AND s."grandparentSlug" IS NULL))
-            AND s."tenantId" = :tenantId
-          ORDER BY "grandparentSlug" DESC, "parentSlug" DESC, slug DESC;
-      `,
-      {
-        replacements: {
-          slug: segment.slug,
-          tenantId: this.options.currentTenant.id,
-        },
-        type: QueryTypes.SELECT,
-        transaction,
-      },
-    )
-
-    return records
-  }
-
   async getChildrenOfProjects(segment: SegmentData) {
     const records = await this.options.database.sequelize.query(
       `
@@ -450,89 +440,27 @@ class SegmentRepository extends RepositoryBase<
       },
     )
 
-    return records.map((sr) => SegmentRepository.populateRelations(sr))
+    return records.map((sr) => populateSegmentRelations(sr))
   }
 
-  static populateRelations(record: SegmentRawData): SegmentData {
-    const segmentData: SegmentData = {
-      ...record,
-      activityTypes: null,
-    }
-
-    if (SegmentRepository.isSubproject(record)) {
-      segmentData.activityTypes = SegmentRepository.buildActivityTypes(record)
-    }
-
-    return segmentData
-  }
-
-  async findById(id: string): Promise<SegmentProjectGroupNestedData | SegmentProjectNestedData> {
-    const transaction = this.transaction
-
+  async findByIds(ids: string[]) {
     const records = await this.options.database.sequelize.query(
       `
         SELECT
-          s.*
+            s.*
         FROM segments s
-        WHERE s.id = :id
-        AND s."tenantId" = :tenantId
-        GROUP BY s.id;
+        WHERE s."id" IN (:ids);
       `,
       {
         replacements: {
-          id,
-          tenantId: this.options.currentTenant.id,
+          ids,
         },
         type: QueryTypes.SELECT,
-        transaction,
+        raw: true,
       },
     )
 
-    if (records.length === 0) {
-      return null
-    }
-
-    const record = records[0]
-
-    if (SegmentRepository.isProjectGroup(record)) {
-      // find projects
-      // TODO: Check sorting - parent should come first
-      const children = await this.getChildrenOfProjectGroups(record)
-
-      const projects = children.reduce((acc, child) => {
-        if (SegmentRepository.isProject(child)) {
-          acc.push(child)
-        } else if (SegmentRepository.isSubproject(child)) {
-          // find project index
-          const projectIndex = acc.findIndex((project) => project.slug === child.parentSlug)
-          if (!acc[projectIndex].subprojects) {
-            acc[projectIndex].subprojects = [child]
-          } else {
-            acc[projectIndex].subprojects.push(child)
-          }
-        }
-        return acc
-      }, [])
-
-      record.projects = projects
-    } else if (SegmentRepository.isProject(record)) {
-      const children = await this.getChildrenOfProjects(record)
-      record.subprojects = children
-    }
-
-    return SegmentRepository.populateRelations(record)
-  }
-
-  static isProjectGroup(segment: SegmentData | SegmentRawData): boolean {
-    return segment.slug && segment.parentSlug === null && segment.grandparentSlug === null
-  }
-
-  static isProject(segment: SegmentData | SegmentRawData): boolean {
-    return segment.slug && segment.parentSlug && segment.grandparentSlug === null
-  }
-
-  static isSubproject(segment: SegmentData | SegmentRawData): boolean {
-    return segment.slug != null && segment.parentSlug != null && segment.grandparentSlug != null
+    return records
   }
 
   /**
@@ -652,7 +580,7 @@ class SegmentRepository extends RepositoryBase<
 
     const projects = await this.options.database.sequelize.query(
       `
-            SELECT 
+            SELECT
                 s.*,
                 COUNT(DISTINCT sp.id)                                       AS subproject_count,
                 jsonb_agg(jsonb_build_object('id', sp.id, 'name', sp.name, 'status', sp.status)) as subprojects,
@@ -660,7 +588,7 @@ class SegmentRepository extends RepositoryBase<
             FROM segments s
                 JOIN segments sp ON sp."parentSlug" = s."slug" and sp."grandparentSlug" is not null
                 AND sp."tenantId" = s."tenantId"
-            WHERE 
+            WHERE
                 s."grandparentSlug" IS NULL
             and s."parentSlug" is not null
             and s."tenantId" = :tenantId
@@ -682,17 +610,48 @@ class SegmentRepository extends RepositoryBase<
 
     const subprojects = projects.map((p) => p.subprojects).flat()
     const integrationsBySegments = await this.queryIntegrationsForSubprojects(subprojects)
+    const mappedGithubReposBySegments = (
+      await Promise.all(
+        subprojects.map(async (s) => ({
+          segmentId: s.id,
+          hasMappedRepo: await this.hasMappedRepos(s.id),
+        })),
+      )
+    ).reduce((acc, { segmentId, hasMappedRepo }) => {
+      if (hasMappedRepo) {
+        acc[segmentId] = true
+      }
+      return acc
+    }, {})
 
     const count = projects.length > 0 ? Number.parseInt(projects[0].totalCount, 10) : 0
 
     const rows = projects.map((i) => removeFieldsFromObject(i, 'totalCount'))
 
     // assign integrations to subprojects
-    rows.forEach((row) => {
-      row.subprojects.forEach((subproject) => {
-        subproject.integrations = integrationsBySegments[subproject.id] || []
-      })
-    })
+    await Promise.all(
+      rows.map(async (row) => {
+        await Promise.all(
+          row.subprojects.map(async (subproject) => {
+            const integrations = integrationsBySegments[subproject.id] || []
+            const githubIntegration = integrations.find((i) => i.platform === 'github')
+
+            if (githubIntegration) {
+              githubIntegration.type = 'primary'
+            } else if (mappedGithubReposBySegments[subproject.id]) {
+              integrations.push({
+                platform: 'github',
+                segmentId: subproject.id,
+                type: 'mapped',
+                mappedWith: await this.mappedWith(subproject.id),
+              })
+            }
+
+            subproject.integrations = integrations
+          }),
+        )
+      }),
+    )
 
     return { count, rows, limit: criteria.limit, offset: criteria.offset }
   }
@@ -750,7 +709,7 @@ class SegmentRepository extends RepositoryBase<
 
     return {
       count: 1,
-      rows: rows.map((sr) => SegmentRepository.populateRelations(sr)),
+      rows: rows.map((sr) => populateSegmentRelations(sr)),
       limit: criteria.limit,
       offset: criteria.offset,
     }
@@ -780,28 +739,8 @@ class SegmentRepository extends RepositoryBase<
     return lodash.groupBy(integrations, 'segmentId')
   }
 
-  /**
-   * Builds activity types object with both default and custom activity types
-   * @param record
-   * @returns
-   */
-  static buildActivityTypes(record: SegmentRawData): ActivityTypeSettings {
-    const activityTypes = {} as ActivityTypeSettings
-
-    activityTypes.default = lodash.cloneDeep(DEFAULT_ACTIVITY_TYPE_SETTINGS)
-    activityTypes.custom = {}
-
-    const customActivityTypes = record.customActivityTypes || {}
-
-    if (Object.keys(customActivityTypes).length > 0) {
-      activityTypes.custom = customActivityTypes
-    }
-
-    return activityTypes
-  }
-
   static getActivityTypes(options: IRepositoryOptions): ActivityTypeSettings {
-    return options.currentSegments.reduce((acc, s) => lodash.merge(acc, s.activityTypes), {})
+    return getSegmentActivityTypes(options.currentSegments)
   }
 
   static async fetchTenantActivityTypes(options: IRepositoryOptions) {
@@ -826,7 +765,7 @@ class SegmentRepository extends RepositoryBase<
       },
     )
 
-    return SegmentRepository.buildActivityTypes(record)
+    return buildSegmentActivityTypes(record)
   }
 
   static activityTypeExists(platform: string, key: string, options: IRepositoryOptions): boolean {
@@ -853,10 +792,12 @@ class SegmentRepository extends RepositoryBase<
     const segments = await seq.query(
       `
         SELECT
-          id
-        FROM segments
-        WHERE "tenantId" = :tenantId
-          AND "sourceId" IN (:sourceIds)
+            DISTINCT UNNEST(ARRAY[s.id, s1.id, s2.id]) AS id
+        FROM segments s
+        JOIN segments s1 ON s1."parentSlug" = s.slug
+        JOIN segments s2 ON s2."parentSlug" = s1.slug
+        WHERE s."tenantId" = :tenantId
+          AND s."sourceId" IN (:sourceIds)
       `,
       {
         replacements: { sourceIds, tenantId: this.options.currentTenant.id },
@@ -866,6 +807,65 @@ class SegmentRepository extends RepositoryBase<
     )
 
     return segments.map((i: any) => i.id)
+  }
+
+  async hasMappedRepos(segmentId: string) {
+    const transaction = SequelizeRepository.getTransaction(this.options)
+    const tenantId = this.options.currentTenant.id
+
+    const result = await this.options.database.sequelize.query(
+      `
+        SELECT EXISTS (
+          SELECT 1
+          FROM "githubRepos" r
+          LEFT JOIN "integrations" i ON r."integrationId" = i.id
+          WHERE r."segmentId" = :segmentId
+          AND r."tenantId" = :tenantId
+          AND (i.id IS NULL OR i."segmentId" != :segmentId)
+          LIMIT 1
+        ) as has_repos
+      `,
+      {
+        replacements: {
+          segmentId,
+          tenantId,
+        },
+        type: QueryTypes.SELECT,
+        transaction,
+      },
+    )
+
+    return !!result[0].has_repos
+  }
+
+  async mappedWith(segmentId: string) {
+    const transaction = SequelizeRepository.getTransaction(this.options)
+    const tenantId = this.options.currentTenant.id
+
+    const result = await this.options.database.sequelize.query(
+      `
+       select
+         s.name as segment_name
+       from
+        "githubRepos" r
+       left join "integrations" i on r."integrationId" = i.id
+       left join "segments" s on i."segmentId" = s.id
+       where r."segmentId" = :segmentId
+       and r."tenantId" = :tenantId
+       and (i.id is null or i."segmentId" != :segmentId)
+       limit 1
+      `,
+      {
+        replacements: {
+          segmentId,
+          tenantId,
+        },
+        type: QueryTypes.SELECT,
+        transaction,
+      },
+    )
+
+    return result[0].segment_name as string
   }
 }
 

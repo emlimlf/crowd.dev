@@ -1,0 +1,26 @@
+:root {
+  /* ---------------------------------- *\
+           Field message style
+  \* ---------------------------------- */
+
+  // Message
+  --lf-field-message-font-size: #{rem(12)};
+  --lf-field-message-line-height: #{rem(16)};
+  --lf-field-message-spacing: #{rem(4)};
+
+  // Icon
+  --lf-field-message-icon-size: #{rem(16)};
+  --lf-field-message-icon-spacing: #{rem(4)};
+
+  // Error
+  --lf-field-message-error-color: var(--lf-color-red-600);
+
+  // Info
+  --lf-field-message-info-color: var(--lf-color-primary-600);
+
+  // Warning
+  --lf-field-message-warning-color: var(--lf-color-yellow-600);
+
+  // Hint
+  --lf-field-message-hint-color: var(--lf-color-gray-500);
+}

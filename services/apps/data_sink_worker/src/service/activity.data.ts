@@ -18,6 +18,7 @@ export interface IActivityCreateData {
   channel?: string
   url?: string
   organizationId?: string
+  importHash?: string
 }
 
 export interface IActivityUpdateData {
@@ -37,4 +38,11 @@ export interface IActivityUpdateData {
   url?: string
   organizationId?: string
   platform?: PlatformType
+}
+
+export interface ISentimentActivityInput {
+  type: string
+  platform: string
+  title: string
+  body: string
 }

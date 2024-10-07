@@ -1,5 +1,5 @@
 import { singleOrDefault } from '@crowd/common'
-import { DbStore } from '@crowd/database'
+import { DbStore } from '@crowd/data-access-layer/src/database'
 import {
   IGenerateStreamsContext,
   IIntegrationStartRemoteSyncContext,
@@ -8,11 +8,11 @@ import {
 import { Logger, LoggerBase, getChildLogger } from '@crowd/logging'
 import { ApiPubSubEmitter, RedisCache, RedisClient } from '@crowd/redis'
 import { IntegrationRunState, IntegrationStreamState } from '@crowd/types'
-import { NANGO_CONFIG, PLATFORM_CONFIG } from '../conf'
-import IntegrationRunRepository from '../repo/integrationRun.repo'
-import MemberAttributeSettingsRepository from '../repo/memberAttributeSettings.repo'
-import SampleDataRepository from '../repo/sampleData.repo'
-import { AutomationRepository } from '../repo/automation.repo'
+import { NANGO_CONFIG, PLATFORM_CONFIG, WORKER_CONFIG } from '../conf'
+import IntegrationRunRepository from '@crowd/data-access-layer/src/old/apps/integration_run_worker/integrationRun.repo'
+import MemberAttributeSettingsRepository from '@crowd/data-access-layer/src/old/apps/integration_run_worker/memberAttributeSettings.repo'
+import SampleDataRepository from '@crowd/data-access-layer/src/old/apps/integration_run_worker/sampleData.repo'
+import { AutomationRepository } from '@crowd/data-access-layer/src/old/apps/integration_run_worker/automation.repo'
 import {
   IntegrationRunWorkerEmitter,
   IntegrationStreamWorkerEmitter,
@@ -71,7 +71,10 @@ export default class IntegrationRunService extends LoggerBase {
       if (error) {
         this.log.warn('Some streams have resulted in error!')
 
-        const pendingRetry = await this.repo.getErrorStreamsPendingRetry(runId)
+        const pendingRetry = await this.repo.getErrorStreamsPendingRetry(
+          runId,
+          WORKER_CONFIG().maxRetries,
+        )
         if (pendingRetry === 0) {
           this.log.error('No streams pending retry and all are in final state - run failed!')
           await this.repo.markRunError(runId, {
@@ -340,7 +343,6 @@ export default class IntegrationRunService extends LoggerBase {
           await txRepo.deleteSampleData(runInfo.tenantId)
         })
 
-        await this.searchSyncWorkerEmitter.triggerActivityCleanup(runInfo.tenantId)
         await this.searchSyncWorkerEmitter.triggerMemberCleanup(runInfo.tenantId)
       } catch (err) {
         this.log.error({ err }, 'Error while deleting sample data!')
@@ -449,8 +451,6 @@ export default class IntegrationRunService extends LoggerBase {
 
     this.log.debug('Marking run as in progress!')
     await this.repo.markRunInProgress(runId)
-    // TODO we might need that later to check for stuck runs
-    // await this.repo.touchRun(runId)
 
     this.log.info('Generating streams!')
     try {
@@ -466,10 +466,6 @@ export default class IntegrationRunService extends LoggerBase {
         err,
       )
     }
-    // TODO we might need that later to check for stuck runs
-    // finally {
-    //   await this.repo.touchRun(runId)
-    // }
   }
 
   private async updateIntegrationSettings(runId: string, settings: unknown): Promise<void> {

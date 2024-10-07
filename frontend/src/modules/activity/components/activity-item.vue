@@ -3,6 +3,16 @@
     <article v-if="loading || !activity">
       <app-loading height="85px" radius="8px" />
     </article>
+    <!-- For now only render the new UI for Git activities -->
+    <article v-else-if="activity.platform === Platform.GIT">
+      <lf-activity-display
+        :activity="activity"
+        @edit="$emit('edit')"
+        @on-update="$emit('onUpdate')"
+        @activity-destroyed="$emit('activity-destroyed')"
+        @open-conversation="$emit('openConversation', activity.conversationId)"
+      />
+    </article>
     <article v-else class="panel">
       <div class="flex">
         <!-- Avatar -->
@@ -13,7 +23,6 @@
               params: { id: activity.member.id },
               query: { projectGroup: selectedProjectGroup?.id },
             }"
-            target="_blank"
           >
             <app-avatar
               :entity="activity.member"
@@ -42,7 +51,7 @@
                   >
                     <img
                       :alt="platform.name"
-                      class="w-4 h-4"
+                      class="min-w-[16px] w-4 h-4"
                       :src="platform.image"
                     />
                   </el-tooltip>
@@ -69,9 +78,9 @@
                   openConversation(activity.conversationId)
                 "
               ><i
-                 class="ri-lg ri-arrow-right-up-line mr-1"
+                 class="text-sm ri-eye-line mr-1"
                />
-                <span class="block">Open conversation</span></a>
+                <span class="block">View conversation</span></a>
               <app-activity-dropdown
                 :show-affiliations="false"
                 :activity="activity"
@@ -105,6 +114,7 @@
                     changes-copy="line"
                     :insertions="activity.attributes.insertions"
                     :deletions="activity.attributes.deletions"
+                    :display-source-id="activity.type === 'authored-commit'"
                   />
                 </div>
               </template>
@@ -136,6 +146,10 @@ import AppActivityContentFooter from '@/modules/activity/components/activity-con
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
+import LfActivityDisplay from '@/shared/modules/activity/components/activity-display.vue';
+import { Platform } from '@/shared/modules/platform/types/Platform';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
 import AppActivityHeader from './activity-header.vue';
 
 const emit = defineEmits(['openConversation', 'edit', 'onUpdate', 'activity-destroyed']);
@@ -157,6 +171,8 @@ const props = defineProps({
   },
 });
 
+const { trackEvent } = useProductTracking();
+
 const lsSegmentsStore = useLfSegmentsStore();
 const { selectedProjectGroup } = storeToRefs(lsSegmentsStore);
 
@@ -165,6 +181,14 @@ const platform = computed(() => CrowdIntegrations.getConfig(
 ));
 
 const openConversation = (conversationId) => {
+  trackEvent({
+    key: FeatureEventKey.VIEW_CONVERSATION,
+    type: EventType.FEATURE,
+    properties: {
+      conversationPlatform: props.activity.platform,
+    },
+  });
+
   emit('openConversation', conversationId);
 };
 </script>

@@ -32,7 +32,7 @@
         Projects list
       </el-button>
       <router-link
-        v-if="hasPermissionToEditProject && hasAccessToProjectGroup(selectedProjectGroup.id)"
+        v-if="hasPermission(LfPermission.projectEdit) && hasAccessToProjectGroup(selectedProjectGroup.id)"
         :to="{
           name: 'adminProjects',
           params: {
@@ -62,11 +62,10 @@ import { storeToRefs } from 'pinia';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
 import isUrl from '@/utils/isUrl';
 import { ref, computed, onMounted } from 'vue';
-import { LfPermissions } from '@/modules/lf/lf-permissions';
-import { mapGetters } from '@/shared/vuex/vuex.helpers';
-import { hasAccessToProjectGroup } from '@/utils/segments';
-import { PermissionChecker } from '@/modules/user/permission-checker';
-import Roles from '@/security/roles';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
+import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
+import { LfRole } from '@/shared/modules/permissions/types/Roles';
 import AppDashboardProjectGroupDrawer from './dashboard-project-group-drawer.vue';
 
 const lsSegmentsStore = useLfSegmentsStore();
@@ -76,23 +75,12 @@ const isDrawerOpen = ref(false);
 
 const loading = ref(true);
 
-const { currentTenant, currentUser } = mapGetters('auth');
+const authStore = useAuthStore();
+const { roles } = storeToRefs(authStore);
 
-const hasPermissionToEditProject = computed(
-  () => new LfPermissions(
-    currentTenant.value,
-    currentUser.value,
-  ).editProject,
-);
+const { hasPermission, hasAccessToProjectGroup } = usePermissions();
 
-const isProjectAdminUser = computed(() => {
-  const permissionChecker = new PermissionChecker(
-    currentTenant.value,
-    currentUser.value,
-  );
-
-  return permissionChecker.currentUserRolesIds.includes(Roles.values.projectAdmin);
-});
+const isProjectAdminUser = computed(() => roles.value.includes(LfRole.projectAdmin));
 
 onMounted(() => {
   if (isProjectAdminUser.value) {

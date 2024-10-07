@@ -1,0 +1,45 @@
+.c-input {
+  background: var(--lf-input-background);
+  border-color: var(--lf-input-border);
+  border-radius: var(--lf-input-border-radius);
+  box-shadow: var(--lf-input-shadow);
+  @apply border px-1 flex items-center transition-all;
+
+  &:focus-within {
+    --lf-input-border: var(--lf-input-focus-border)
+  }
+
+  &.is-disabled{
+    --lf-input-background: var(--lf-input-disabled-background);
+    --lf-input-border: var(--lf-input-disabled-border);
+     @apply cursor-not-allowed;
+  }
+
+  &.is-invalid{
+    --lf-input-border: var(--lf-input-invalid-border)
+  }
+
+  input{
+    color: var(--lf-input-color);
+    @apply text-sm leading-6 font-normal p-2 outline-none appearance-none flex-grow block w-full transition-all bg-transparent;
+
+    &::placeholder, &:-ms-input-placeholder, &::-ms-input-placeholder {
+      color: var(--lf-input-placeholder-color);
+      @apply opacity-100;
+    }
+
+    &:disabled{
+      --lf-input-color: var(--lf-input-disabled-color);
+      --lf-input-placeholder-color: var(--lf-input-disabled-placeholder-color);
+      @apply cursor-not-allowed;
+    }
+  }
+
+  &__prefix {
+    @apply pl-2 text-sm leading-6 text-gray-400;
+  }
+
+  &__suffix {
+    @apply pr-2 text-sm leading-6 text-gray-400;
+  }
+}

@@ -3,21 +3,24 @@
     class="flex grow gap-8 items-center pagination-sorter"
     :class="sorterClass"
   >
-    <span
-      v-if="total"
-      id="totalCount"
-      data-qa="members-total"
-      class="text-gray-500 text-sm"
-    ><span v-if="hasPageCounter">{{ count.minimum.toLocaleString('en') }}-{{
-       count.maximum.toLocaleString('en')
-     }}
-       of
-     </span>
-      {{ computedLabel }}</span>
+    <div class="flex items-center gap-0.5">
+      <span
+        v-if="total"
+        id="totalCount"
+        data-qa="members-total"
+        class="text-gray-500 text-sm"
+      ><span v-if="hasPageCounter">{{ count.minimum.toLocaleString('en') }}-{{
+         count.maximum.toLocaleString('en')
+       }}
+         of
+       </span>
+        {{ computedLabel }}</span>
+
+      <slot name="defaultFilters" />
+    </div>
     <div class="flex items-center">
-      <!-- TODO: Need to refactor this -->
       <button
-        v-if="module === 'contact'"
+        v-if="['member', 'organization'].includes(module)"
         type="button"
         class="btn btn-link btn-link--md btn-link--primary mr-3"
         @click="doExport"
@@ -40,11 +43,15 @@
 </template>
 
 <script setup>
-import { computed, defineProps, defineEmits } from 'vue';
+import { computed } from 'vue';
 import pluralize from 'pluralize';
 import { getExportMax, showExportDialog, showExportLimitDialog } from '@/modules/member/member-export-limit';
 import Message from '@/shared/message/message';
-import { mapActions, mapGetters } from '@/shared/vuex/vuex.helpers';
+import { useAuthStore } from '@/modules/auth/store/auth.store';
+import { storeToRefs } from 'pinia';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
+import { useRoute } from 'vue-router';
 
 const emit = defineEmits([
   'changeSorter',
@@ -91,8 +98,12 @@ const props = defineProps({
   },
 });
 
-const { currentTenant } = mapGetters('auth');
-const { doRefreshCurrentUser } = mapActions('auth');
+const { trackEvent } = useProductTracking();
+const route = useRoute();
+
+const authStore = useAuthStore();
+const { tenant } = storeToRefs(authStore);
+const { getUser } = authStore;
 
 const model = computed({
   get() {
@@ -112,15 +123,22 @@ const model = computed({
 });
 
 const computedOptions = computed(() => {
-  if (
-    props.module === 'activity'
-    || props.module === 'conversation'
-  ) {
+  if (props.module === 'activity') {
     return [
       {
         value: 'trending',
         label: 'Trending',
       },
+      {
+        value: 'recentActivity',
+        label: 'Most recent activity',
+      },
+    ];
+  }
+
+  if (props.module === 'conversation'
+  ) {
+    return [
       {
         value: 'recentActivity',
         label: 'Most recent activity',
@@ -136,7 +154,7 @@ const computedOptions = computed(() => {
   ];
 });
 
-const computedLabel = computed(() => pluralize(props.module === 'member' ? 'contributor' : props.module, props.total, true));
+const computedLabel = computed(() => pluralize(props.module === 'member' ? 'person' : props.module, props.total, true));
 
 const count = computed(() => ({
   minimum:
@@ -173,19 +191,27 @@ const onChange = (value) => {
 
 const doExport = async () => {
   try {
-    const tenantCsvExportCount = currentTenant.value.csvExportCount;
+    const tenantCsvExportCount = tenant.value.csvExportCount;
     const planExportCountMax = getExportMax(
-      currentTenant.value.plan,
+      tenant.value.plan,
     );
-
     await showExportDialog({
       tenantCsvExportCount,
       planExportCountMax,
+      badgeContent: pluralize(props.module === 'member' ? 'person' : props.module, props.total, true),
+    });
+
+    trackEvent({
+      key: props.module === 'member' ? FeatureEventKey.EXPORT_MEMBERS : FeatureEventKey.EXPORT_ORGANIZATIONS,
+      type: EventType.FEATURE,
+      properties: {
+        path: route.path,
+      },
     });
 
     await props.export();
 
-    await doRefreshCurrentUser(null);
+    await getUser();
 
     Message.success(
       'CSV download link will be sent to your e-mail',
@@ -193,7 +219,7 @@ const doExport = async () => {
   } catch (error) {
     if (error.response?.status === 403) {
       const planExportCountMax = getExportMax(
-        currentTenant.value.plan,
+        tenant.value.plan,
       );
 
       showExportLimitDialog({ planExportCountMax });

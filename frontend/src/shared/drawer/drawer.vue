@@ -3,6 +3,8 @@
     v-model="model"
     :custom-class="`${customClass} ${
       hasBorder ? 'bordered' : ''
+    } ${
+      hasPadding ? '' : 'no-padding'
     }`"
     :show-close="false"
     :destroy-on-close="true"
@@ -42,7 +44,7 @@
               @click="close"
             >
               <i
-                class="ri-close-line text-lg text-gray-400 group-hover:text-brand-500"
+                class="ri-close-line text-lg text-gray-400 group-hover:text-primary-500"
               />
             </el-button>
           </div>
@@ -95,6 +97,10 @@ const props = defineProps({
   hasBorder: {
     type: Boolean,
     default: () => false,
+  },
+  hasPadding: {
+    type: Boolean,
+    default: () => true,
   },
 });
 

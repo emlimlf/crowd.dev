@@ -1,23 +1,10 @@
 import config from 'config'
-import { IDatabaseConfig } from '@crowd/database'
+import { IDatabaseConfig } from '@crowd/data-access-layer/src/database'
 import { IRedisConfiguration } from '@crowd/redis'
 export interface IOpenSearchConfig {
   node: string
-  region?: string
-  accessKeyId?: string
-  secretAccessKey?: string
-}
-
-export interface IServiceConfig {
-  edition: string
-}
-
-let serviceConfig: IServiceConfig
-export const SERVICE_CONFIG = (): IServiceConfig => {
-  if (serviceConfig) return serviceConfig
-
-  serviceConfig = config.get<IServiceConfig>('service')
-  return serviceConfig
+  username: string
+  password: string
 }
 
 let openSearchConfig: IOpenSearchConfig

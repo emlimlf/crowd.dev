@@ -16,6 +16,7 @@ export default {
   connectComponent: GerritConnect,
   url: () => null,
   showProfileLink: false,
+  placeholder: 'Gerrit username or email address',
   chartColor: '#E5512C',
   activityDisplay: {
     showContentDetails: false,
@@ -29,8 +30,5 @@ export default {
       copy: 'reply',
       number: conversation.activityCount - 1,
     }),
-  },
-  organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
   },
 };

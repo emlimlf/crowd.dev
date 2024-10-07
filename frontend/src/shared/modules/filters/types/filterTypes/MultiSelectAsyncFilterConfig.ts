@@ -4,7 +4,8 @@ import { BaseFilterConfig, FilterConfigType } from '@/shared/modules/filters/typ
 export interface MultiSelectAsyncFilterOption {
   label: string;
   value: string;
-  logo?: string;
+  prefix?: string;
+  description?: string;
 }
 export interface MultiSelectAsyncFilterOptions {
   hideIncludeSwitch?: boolean;

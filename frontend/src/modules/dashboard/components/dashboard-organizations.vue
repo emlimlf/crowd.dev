@@ -10,7 +10,6 @@
         query: filterQueryService().setQuery(allOrganizations.config),
       }"
       button-title="All organizations"
-      report-name="Organizations report"
     />
 
     <div class="flex -mx-5 pt-7">
@@ -24,21 +23,22 @@
               New organizations
             </h6>
             <app-dashboard-count
-              :loading="organizations.loadingRecent"
-              :query="newOrganizationCount"
+              :loading="!chartData"
+              :current-total="chartData?.newOrganizations.total"
+              :previous-total="chartData?.newOrganizations.previousPeriodTotal"
             />
           </div>
           <div class="w-7/12">
             <!-- Chart -->
             <div
-              v-if="organizations.loadingRecent"
-              v-loading="organizations.loadingRecent"
+              v-if="!chartData"
+              v-loading="!chartData"
               class="app-page-spinner !relative chart-loading"
             />
             <app-dashboard-widget-chart
               v-else
+              :data="chartData?.newOrganizations.timeseries"
               :datasets="datasets('new organizations')"
-              :query="newOrganizationChart"
             />
           </div>
         </div>
@@ -106,7 +106,7 @@
                 Active <span>organizations</span>
                 <el-tooltip
                   placement="top"
-                  content="Organizations whose contacts engaged in at least one activity during the selected time period."
+                  content="Organizations whose people engaged in at least one activity during the selected time period."
                   popper-class="max-w-[260px]"
                 >
                   <i class="ri-information-line text-sm ml-1 font-normal" />
@@ -115,21 +115,22 @@
             </div>
             <!-- info -->
             <app-dashboard-count
-              :loading="organizations.loadingActive"
-              :query="activeOrganizationCount"
+              :loading="!chartData"
+              :current-total="chartData?.activeOrganizations.total"
+              :previous-total="chartData?.activeOrganizations.previousPeriodTotal"
             />
           </div>
           <div class="w-7/12">
             <!-- Chart -->
             <div
-              v-if="organizations.loadingActive"
-              v-loading="organizations.loadingActive"
+              v-if="!chartData"
+              v-loading="!chartData"
               class="app-page-spinner !relative chart-loading"
             />
             <app-dashboard-widget-chart
               v-else
+              :data="chartData?.activeOrganizations.timeseries"
               :datasets="datasets('active organizations')"
-              :query="activeOrganizationChart"
             />
           </div>
         </div>
@@ -189,81 +190,44 @@
   </div>
 </template>
 
-<script>
-import { mapGetters } from 'vuex';
+<script lang="ts" setup>
 import moment from 'moment';
-import {
-  newOrganizationChart,
-  activeOrganizationChart,
-  newOrganizationCount,
-  activeOrganizationCount,
-} from '@/modules/dashboard/dashboard.cube';
 import AppDashboardOrganizationItem from '@/modules/dashboard/components/organization/dashboard-organization-item.vue';
 import AppDashboardCount from '@/modules/dashboard/components/dashboard-count.vue';
-import { DAILY_GRANULARITY_FILTER } from '@/modules/widget/widget-constants';
 import AppDashboardEmptyState from '@/modules/dashboard/components/dashboard-empty-state.vue';
 import AppDashboardWidgetHeader from '@/modules/dashboard/components/dashboard-widget-header.vue';
 import AppDashboardWidgetChart from '@/modules/dashboard/components/dashboard-widget-chart.vue';
 import allOrganizations from '@/modules/organization/config/saved-views/views/all-organizations';
 import { filterQueryService } from '@/shared/modules/filters/services/filter-query.service';
-import { storeToRefs } from 'pinia';
-import { useLfSegmentsStore } from '@/modules/lf/segments/store';
+import { computed } from 'vue';
+import { mapGetters } from '@/shared/vuex/vuex.helpers';
 
+const {
+  chartData, organizations, period, activeOrganizations, recentOrganizations,
+} = mapGetters('dashboard');
+
+const periodRange = computed(() => [
+  moment()
+    .utc()
+    .subtract(period.value - 1, 'day')
+    .format('YYYY-MM-DD'),
+  moment()
+    .utc()
+    .format('YYYY-MM-DD'),
+]);
+
+const datasets = (name: string) => [{
+  name,
+  borderColor: '#003778',
+  measure: 'Organizations.count',
+  granularity: 'day',
+}];
+
+</script>
+
+<script lang="ts">
 export default {
   name: 'AppDashboardOrganizations',
-  components: {
-    AppDashboardWidgetChart,
-    AppDashboardWidgetHeader,
-    AppDashboardEmptyState,
-    AppDashboardCount,
-    AppDashboardOrganizationItem,
-  },
-  data() {
-    return {
-      newOrganizationChart,
-      activeOrganizationChart,
-      newOrganizationCount,
-      activeOrganizationCount,
-      filterQueryService,
-      allOrganizations,
-    };
-  },
-  computed: {
-    ...mapGetters('dashboard', [
-      'activeOrganizations',
-      'recentOrganizations',
-      'organizations',
-      'period',
-    ]),
-    periodRange() {
-      return [
-        moment()
-          .utc()
-          .subtract(this.period.value - 1, 'day')
-          .format('YYYY-MM-DD'),
-        moment()
-          .utc()
-          .format('YYYY-MM-DD'),
-      ];
-    },
-    selectedProjectGroup() {
-      const lsSegmentsStore = useLfSegmentsStore();
-
-      return storeToRefs(lsSegmentsStore).selectedProjectGroup.value;
-    },
-  },
-  methods: {
-    datasets(name) {
-      return [
-        {
-          name,
-          borderColor: '#003778',
-          measure: 'Organizations.count',
-          granularity: DAILY_GRANULARITY_FILTER.value,
-        },
-      ];
-    },
-  },
 };
 </script>
 

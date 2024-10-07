@@ -7,7 +7,7 @@ export const filterApiService = () => {
   function buildApiFilter(
     values: Filter,
     configuration: Record<string, FilterConfig>,
-    searchConfig: SearchFilterConfig,
+    searchConfig?: SearchFilterConfig,
     savedViewsConfig?: SavedViewsConfig,
   ): FilterQuery {
     const {
@@ -26,7 +26,7 @@ export const filterApiService = () => {
     if (search && search.length > 0) {
       baseFilters = [
         ...baseFilters,
-        ...searchConfig.apiFilterRenderer(search),
+        ...(searchConfig?.apiFilterRenderer ? searchConfig.apiFilterRenderer(search) : []),
       ];
     }
 
@@ -95,6 +95,7 @@ export const filterApiService = () => {
     const orderBy = `${order.prop}_${order.order === 'descending' ? 'DESC' : 'ASC'}`;
 
     return {
+      search,
       filter,
       orderBy,
       body,

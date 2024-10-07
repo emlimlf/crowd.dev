@@ -1,6 +1,7 @@
 // processData.ts content
 import { ProcessDataHandler } from '../../types'
 import { Groupsio_GRID } from './grid'
+import { roundToNearestMinute } from '../utils'
 import {
   GroupsioPublishData,
   GroupsioPublishDataType,
@@ -10,7 +11,7 @@ import {
   GroupsioMemberLeftData,
   GroupsioActivityType,
 } from './types'
-import { IActivityData, IMemberData, PlatformType } from '@crowd/types'
+import { IActivityData, IMemberData, MemberIdentityType, PlatformType } from '@crowd/types'
 import sanitizeHtml from 'sanitize-html'
 
 const processMemberJoin: ProcessDataHandler = async (ctx) => {
@@ -20,24 +21,36 @@ const processMemberJoin: ProcessDataHandler = async (ctx) => {
 
   const member: IMemberData = {
     displayName: memberData.full_name,
-    emails: [memberData.email],
     identities: [
       {
         sourceId: memberData.user_id.toString(),
         platform: PlatformType.GROUPSIO,
-        username: memberData.email,
+        value: memberData.email,
+        type: MemberIdentityType.USERNAME,
+        verified: true,
+      },
+      {
+        sourceId: memberData.user_id.toString(),
+        platform: PlatformType.GROUPSIO,
+        value: memberData.email,
+        type: MemberIdentityType.EMAIL,
+        verified: true,
       },
     ],
   }
 
+  const roundToMinJoinedAt = roundToNearestMinute(data.joinedAt)
   const activity: IActivityData = {
     type: GroupsioActivityType.MEMBER_JOIN,
     member,
     channel: data.group,
     timestamp: data.joinedAt,
-    sourceId: `join-${memberData.user_id}-${memberData.group_id}-${data.joinedAt}`,
+    sourceId: `join-${memberData.user_id}-${memberData.group_id}-${roundToMinJoinedAt}`,
     score: Groupsio_GRID[GroupsioActivityType.MEMBER_JOIN].score,
     isContribution: Groupsio_GRID[GroupsioActivityType.MEMBER_JOIN].isContribution,
+    attributes: {
+      userStatus: memberData.user_status,
+    },
   }
 
   await ctx.publishActivity(activity)
@@ -50,12 +63,20 @@ const processMessage: ProcessDataHandler = async (ctx) => {
 
   const member: IMemberData = {
     displayName: memberData.full_name,
-    emails: [memberData.email],
     identities: [
       {
         sourceId: memberData.user_id.toString(),
         platform: PlatformType.GROUPSIO,
-        username: memberData.email,
+        value: memberData.email,
+        type: MemberIdentityType.USERNAME,
+        verified: true,
+      },
+      {
+        sourceId: memberData.user_id.toString(),
+        platform: PlatformType.GROUPSIO,
+        value: memberData.email,
+        type: MemberIdentityType.EMAIL,
+        verified: true,
       },
     ],
   }
@@ -85,22 +106,31 @@ const processMemberLeft: ProcessDataHandler = async (ctx) => {
 
   const member: IMemberData = {
     displayName: memberData.full_name,
-    emails: [memberData.email],
     identities: [
       {
         sourceId: memberData.user_id.toString(),
         platform: PlatformType.GROUPSIO,
-        username: memberData.email,
+        value: memberData.email,
+        type: MemberIdentityType.USERNAME,
+        verified: true,
+      },
+      {
+        sourceId: memberData.user_id.toString(),
+        platform: PlatformType.GROUPSIO,
+        value: memberData.email,
+        type: MemberIdentityType.EMAIL,
+        verified: true,
       },
     ],
   }
 
+  const roundToMinLeftAt = roundToNearestMinute(data.leftAt)
   const activity: IActivityData = {
     type: GroupsioActivityType.MEMBER_LEAVE,
     member,
     channel: data.group,
     timestamp: data.leftAt,
-    sourceId: `left-${memberData.user_id}-${memberData.group_id}-${data.leftAt}`,
+    sourceId: `left-${memberData.user_id}-${memberData.group_id}-${roundToMinLeftAt}`,
     score: Groupsio_GRID[GroupsioActivityType.MEMBER_LEAVE].score,
     isContribution: Groupsio_GRID[GroupsioActivityType.MEMBER_LEAVE].isContribution,
   }

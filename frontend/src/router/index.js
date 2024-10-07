@@ -9,6 +9,9 @@ import authGuards from '@/middleware/auth';
 import modules from '@/modules';
 import ProgressBar from '@/shared/progress-bar/progress-bar';
 import { useLfSegmentsStore } from '@/modules/lf/segments/store';
+import { AuthService } from '@/modules/auth/services/auth.service';
+import auth from '@/modules/auth';
+import navigationGuard from '@/middleware/navigation/navigation-guard';
 
 /**
  * Loads all the routes from src/modules/ folders, and adds the catch-all rule to handle 404s
@@ -16,6 +19,7 @@ import { useLfSegmentsStore } from '@/modules/lf/segments/store';
  * @type {[...*,{redirect: string, path: string}]}
  */
 const routes = [
+  ...auth.routes,
   ...Object.keys(modules)
     .filter((key) => Boolean(modules[key].routes))
     .map((key) => modules[key].routes.map((r) => {
@@ -33,6 +37,7 @@ const routes = [
   },
   { path: '/:catchAll(.*)', redirect: '/404' },
 ];
+
 // eslint-disable-next-line import/no-mutable-exports
 let router;
 
@@ -90,24 +95,24 @@ export const createRouter = () => {
           store,
         };
 
-        middlewareArray.forEach((middleware) => {
-          middleware(context);
+        await middlewareArray.forEach(async (middleware) => {
+          await middleware(context);
         });
 
         // Redirect to project group landing pages if routes that require a selected project group
         // And no project group is selected
-        if (to.meta.segments?.requireSelectedProjectGroup) {
-          if (!selectedProjectGroup.value && !to.query.projectGroup) {
+        if (to.meta.segments?.requireSelectedProjectGroup || to.meta.segments?.optionalSelectedProjectGroup) {
+          if (!selectedProjectGroup.value && !to.query.projectGroup && !to.meta.segments?.optionalSelectedProjectGroup) {
             next('/project-groups');
             return;
           }
 
-          if (!to.query.projectGroup) {
-            next({ ...to, query: { ...to.query, projectGroup: selectedProjectGroup.value.id } });
+          if (!to.query.projectGroup && selectedProjectGroup.value?.id) {
+            next({ ...to, query: { ...to.query, projectGroup: selectedProjectGroup.value?.id } });
             return;
           }
 
-          if (!selectedProjectGroup.value) {
+          if (!selectedProjectGroup.value && AuthService.getTenantId()) {
             try {
               await listProjectGroups({
                 limit: null,
@@ -126,8 +131,9 @@ export const createRouter = () => {
       next();
     });
 
-    router.afterEach(() => {
+    router.afterEach(async (to) => {
       ProgressBar.done();
+      await navigationGuard({ to });
     });
   }
 

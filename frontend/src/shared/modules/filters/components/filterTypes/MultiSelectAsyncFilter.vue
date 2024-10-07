@@ -1,12 +1,12 @@
 <template>
   <div v-if="props.modelValue">
-    <cr-filter-include-switch
+    <lf-filter-include-switch
       v-if="!props.hideIncludeSwitch"
       v-model="include"
     />
     <div class="px-4 pt-3">
       <el-select
-        v-model="data.selected"
+        :model-value="data.selected || []"
         multiple
         remote
         filterable
@@ -18,12 +18,14 @@
         popper-class="filter-multiselect-popper"
         :loading="loading"
         no-data-text=""
+        @update:model-value="updateSelected($event)"
       >
         <el-option
           v-for="option of filteredOptions"
           :key="option.value"
           :label="option.label"
           :value="option"
+          class="!h-auto !min-h-10 !py-2.5"
         >
           <div
             class="h-4 el-checkbox filter-checkbox"
@@ -33,13 +35,18 @@
               <span class="el-checkbox__inner" />
             </span>
           </div>
-          <template v-if="config.id === 'organizations'">
-            <span class="flex items-center justify-center w-6 h-6 p-1 mr-3 border rounded-md ">
-              <img v-if="option.logo" :src="option.logo" class="w-4 h-4 min-w-[16px]" :alt="option.label" />
-              <i v-else class="flex items-center justify-center w-4 h-4 text-gray-300 ri-community-line" />
-            </span>
-          </template>
-          {{ option.label }}
+          <div v-if="option.prefix" v-html="$sanitize(option.prefix)" />
+          <div>
+            <p class="mb-0 leading-5">
+              {{ option.label }}
+            </p>
+            <p
+              v-if="option.description"
+              class="text-2xs text-gray-500 leading-5"
+            >
+              {{ option.description }}
+            </p>
+          </div>
         </el-option>
       </el-select>
     </div>
@@ -52,7 +59,7 @@ import {
 } from 'vue';
 import { required } from '@vuelidate/validators';
 import useVuelidate from '@vuelidate/core';
-import CrFilterIncludeSwitch from '@/shared/modules/filters/components/partials/FilterIncludeSwitch.vue';
+import LfFilterIncludeSwitch from '@/shared/modules/filters/components/partials/FilterIncludeSwitch.vue';
 import {
   MultiSelectAsyncFilterConfig,
   MultiSelectAsyncFilterOption,
@@ -113,13 +120,6 @@ watch(() => props.modelValue.value, (value?: string[]) => {
   }
 }, { immediate: true });
 
-watch(() => data.value.selected, (value) => {
-  emit('update:modelValue', {
-    ...props.modelValue,
-    value: value.map((v) => v.value),
-  });
-});
-
 const loading = ref<boolean>(false);
 const filteredOptions = ref<MultiSelectAsyncFilterOption[]>([]);
 
@@ -132,6 +132,14 @@ const searchOptions = (query: string) => {
     .finally(() => {
       loading.value = false;
     });
+};
+
+const updateSelected = (value: any[]) => {
+  data.value.selected = value;
+  emit('update:modelValue', {
+    ...props.modelValue,
+    value: value.map((v) => v.value),
+  });
 };
 
 onMounted(() => {
@@ -148,7 +156,7 @@ onMounted(() => {
 
 <script lang="ts">
 export default {
-  name: 'CrMultiSelectAsyncFilter',
+  name: 'LfMultiSelectAsyncFilter',
 };
 </script>
 
@@ -164,7 +172,7 @@ export default {
     @apply px-3 #{!important};
 
     &.selected{
-      @apply bg-brand-25 font-normal px-3 #{!important};
+      @apply bg-primary-25 font-normal px-3 #{!important};
     }
 
     &:after{

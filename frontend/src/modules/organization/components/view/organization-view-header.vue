@@ -1,6 +1,6 @@
 <template>
-  <div class="organization-view-header panel relative">
-    <div class="flex justify-between">
+  <div class="organization-view-header panel !px-0 relative">
+    <div class="flex justify-between px-6">
       <div class="flex items-center">
         <app-avatar
           :entity="{
@@ -23,21 +23,27 @@
           <div
             class="text-sm text-gray-600 flex items-center"
           >
+            <div v-if="true" class="flex items-center gap-2 mr-2">
+              <lf-organization-lf-member-tag
+                :organization="organization"
+              />
+              <span class="text-gray-400">·</span>
+            </div>
             <div
-              v-if="organization.website"
+              v-if="getOrganizationWebsite(organization)"
               class="flex items-center"
             >
               <i class="ri-link mr-1" />
               <a
-                :href="withHttp(organization.website)"
+                :href="withHttp(getOrganizationWebsite(organization))"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-gray-600"
-              >{{ organization.website }}</a>
+              >{{ getOrganizationWebsite(organization) }}</a>
             </div>
             <span
               v-if="
-                organization.website
+                getOrganizationWebsite(organization)
                   && organization.location
               "
               class="mx-2"
@@ -53,17 +59,22 @@
         </div>
       </div>
     </div>
-    <div
-      class="py-6 border-b border-gray-200 mb-4"
-    >
-      <div v-if="organization.description || organization.headline" class="flex items-center">
+    <div v-if="organization.description || organization.headline" class="px-6 mt-6">
+      <div
+        class="flex items-center"
+      >
         <p class="text-gray-400 font-medium text-2xs mr-2">
           Headline
         </p>
-        <el-tooltip content="Source: Enrichment" placement="top" trigger="hover">
-          <app-svg name="source" class="h-3 w-3" />
+        <el-tooltip
+          content="Source: Enrichment"
+          placement="top"
+          trigger="hover"
+        >
+          <lf-svg name="source" class="h-3 w-3" />
         </el-tooltip>
       </div>
+
       <app-organization-headline :organization="organization" />
 
       <div
@@ -75,17 +86,19 @@
       <!-- show more/less button -->
       <div
         v-if="displayShowMore"
-        class="text-2xs text-brand-500 mt-3 cursor-pointer"
+        class="text-2xs text-primary-500 mt-3 cursor-pointer"
         @click.stop="toggleContent"
       >
         Show {{ showMore ? 'less' : 'more' }}
       </div>
     </div>
 
-    <div class="grid grid-rows-2 grid-flow-col gap-4">
+    <el-divider class="!mb-4 !mt-6 border-gray-200" />
+
+    <div class="grid grid-rows-2 grid-flow-col gap-4 px-6">
       <div>
         <p class="text-gray-400 font-medium text-2xs">
-          # of contributors
+          # of people
         </p>
         <p class="mt-1 text-gray-900 text-xs">
           {{
@@ -109,22 +122,28 @@
           }}
         </p>
       </div>
-      <cr-enrichment-sneak-peak type="contact">
+      <lf-enrichment-sneak-peak type="contact">
         <template #default="{ enabled }">
           <div>
             <div class="flex items-center">
               <p class="text-gray-400 font-medium text-2xs mr-2" :class="{ 'text-purple-400': !enabled }">
                 Headcount
               </p>
-              <el-tooltip content="Source: Enrichment" placement="top" trigger="hover" :disabled="!enabled">
-                <app-svg name="source" class="h-3 w-3" />
+              <el-tooltip
+                v-if="organization.size || organization.employees"
+                content="Source: Enrichment"
+                placement="top"
+                trigger="hover"
+                :disabled="!enabled"
+              >
+                <lf-svg name="source" class="h-3 w-3" />
               </el-tooltip>
             </div>
 
             <p v-if="enabled" class="mt-1 text-gray-900 text-xs">
               {{
                 formattedInformation(
-                  organization.size,
+                  organization.size || organization.employees,
                   'string',
                 )
               }}
@@ -136,7 +155,7 @@
             </div>
           </div>
         </template>
-      </cr-enrichment-sneak-peak>
+      </lf-enrichment-sneak-peak>
       <div>
         <p class="text-gray-400 font-medium text-2xs">
           Joined date
@@ -150,20 +169,26 @@
           }}
         </p>
       </div>
-      <cr-enrichment-sneak-peak type="contact">
+      <lf-enrichment-sneak-peak type="contact">
         <template #default="{ enabled }">
           <div>
             <div class="flex items-center">
               <p class="text-gray-400 font-medium text-2xs mr-2" :class="{ 'text-purple-400': !enabled }">
                 Annual Revenue
               </p>
-              <el-tooltip content="Source: Enrichment" placement="top" trigger="hover" :disabled="!enabled">
-                <app-svg name="source" class="h-3 w-3" />
+              <el-tooltip
+                v-if="organization.revenueRange"
+                content="Source: Enrichment"
+                placement="top"
+                trigger="hover"
+                :disabled="!enabled"
+              >
+                <lf-svg name="source" class="h-3 w-3" />
               </el-tooltip>
             </div>
             <p v-if="enabled" class="mt-1 text-gray-900 text-xs">
               {{
-                revenueRange.displayValue(
+                revenueRange.formatValue(
                   organization.revenueRange,
                 )
               }}
@@ -175,7 +200,7 @@
             </div>
           </div>
         </template>
-      </cr-enrichment-sneak-peak>
+      </lf-enrichment-sneak-peak>
       <div>
         <p class="text-gray-400 font-medium text-2xs">
           Last active
@@ -207,8 +232,10 @@ import {
 import { withHttp } from '@/utils/string';
 import AppOrganizationBadge from '@/modules/organization/components/organization-badge.vue';
 import AppOrganizationHeadline from '@/modules/organization/components/organization-headline..vue';
-import AppSvg from '@/shared/svg/svg.vue';
-import CrEnrichmentSneakPeak from '@/shared/modules/enrichment/components/enrichment-sneak-peak.vue';
+import LfSvg from '@/shared/svg/svg.vue';
+import LfOrganizationLfMemberTag from '@/modules/organization/components/lf-member/organization-lf-member-tag.vue';
+import LfEnrichmentSneakPeak from '@/shared/modules/enrichment/components/enrichment-sneak-peak.vue';
+import { getOrganizationWebsite } from '@/utils/organization';
 import revenueRange from '../../config/enrichment/revenueRange';
 
 const props = defineProps({

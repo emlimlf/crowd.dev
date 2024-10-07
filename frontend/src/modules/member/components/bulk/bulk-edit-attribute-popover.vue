@@ -32,7 +32,7 @@
                 :create-if-not-found="true"
                 :in-memory-filter="false"
               >
-                <template v-if="selectedAttribute.name === 'organizations'" #default="{ item }">
+                <template v-if="selectedAttribute.name === 'organizations'" #option="{ item }">
                   <div class="flex items-center">
                     <app-avatar
                       :entity="{
@@ -76,13 +76,13 @@
             <div v-if="selectedAttribute.type === 'multiSelect'" class="flex items-center gap-2 -mt-2">
               <i class="ri-information-line text-gray-400 text-lg " />
               <span class="text-xs leading-5 text-gray-500">
-                Values will be added to each selected contributor and the existing ones won’t be overwritten.
+                Values will be added to each selected profile and the existing ones won’t be overwritten.
               </span>
             </div>
 
             <div v-else class="rounded-md bg-yellow-50 border border-yellow-100 flex items-center gap-2 py-2 px-4 mt-6">
               <i class="ri-alert-fill text-yellow-500 text-base " />
-              <span class="text-xs leading-5 text-gray-900">Changes will overwrite the current attribute value of the selected contributors.</span>
+              <span class="text-xs leading-5 text-gray-900">Changes will overwrite the current attribute value of the selected profile.</span>
             </div>
           </div>
         </el-form>
@@ -117,6 +117,9 @@ import { OrganizationService } from '@/modules/organization/organization-service
 import getCustomAttributes from '@/shared/fields/get-custom-attributes';
 import getParsedAttributes from '@/shared/attributes/get-parsed-attributes';
 import AppBulkEditAttributeDropdown from '@/modules/member/components/bulk/bulk-edit-attribute-dropdown.vue';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
+import { useRoute } from 'vue-router';
 
 const CalendarIcon = h(
   'i', // type
@@ -127,6 +130,8 @@ const CalendarIcon = h(
   [],
 );
 
+const route = useRoute();
+const { trackEvent } = useProductTracking();
 const memberStore = useMemberStore();
 const store = useStore();
 const { selectedMembers, customAttributes } = storeToRefs(memberStore);
@@ -261,18 +266,10 @@ const handleDropdownChange = (value) => {
   }
 };
 
-const fetchOrganizationsFn = (query, limit) => OrganizationService.listAutocomplete(query, limit)
-  .then((options) => options.map((o) => ({
-    ...o,
-    displayName: o.label,
-    name: o.label,
-    memberOrganizations: {
-      title: '',
-      dateStart: '',
-      dateEnd: '',
-    },
-  })))
-  .catch(() => []);
+const fetchOrganizationsFn = ({ query, limit }) => OrganizationService.listOrganizationsAutocomplete({
+  query,
+  limit,
+});
 
 const createOrganizationFn = (value) => OrganizationService.create({
   name: value,
@@ -311,6 +308,15 @@ const updateCustomAttribute = (attribute, value) => {
 };
 
 const handleSubmit = async () => {
+  trackEvent({
+    key: FeatureEventKey.EDIT_MEMBER_ATTRIBUTES,
+    type: EventType.FEATURE,
+    properties: {
+      path: route.path,
+      bulk: true,
+    },
+  });
+
   const formattedAttributes = getParsedAttributes(
     computedCustomAttributes.value,
     formModel.value,

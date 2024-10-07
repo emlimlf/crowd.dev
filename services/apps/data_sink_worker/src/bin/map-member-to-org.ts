@@ -1,24 +1,21 @@
-import { DB_CONFIG, REDIS_CONFIG, SQS_CONFIG, TEMPORAL_CONFIG, UNLEASH_CONFIG } from '../conf'
-import { DbStore, getDbConnection } from '@crowd/database'
-import { getServiceTracer } from '@crowd/tracing'
-import { getServiceLogger } from '@crowd/logging'
-import { getSqsClient } from '@crowd/sqs'
-import MemberRepository from '../repo/member.repo'
-import MemberService from '../service/member.service'
-import DataSinkRepository from '../repo/dataSink.repo'
-import { OrganizationService } from '../service/organization.service'
-import { getUnleashClient } from '@crowd/feature-flags'
-import { Client as TemporalClient, getTemporalClient } from '@crowd/temporal'
-import { getRedisClient } from '@crowd/redis'
 import {
   DataSinkWorkerEmitter,
-  NodejsWorkerEmitter,
   PriorityLevelContextRepository,
   QueuePriorityContextLoader,
   SearchSyncWorkerEmitter,
 } from '@crowd/common_services'
+import { DbStore, getDbConnection } from '@crowd/data-access-layer/src/database'
+import DataSinkRepository from '@crowd/data-access-layer/src/old/apps/data_sink_worker/repo/dataSink.repo'
+import MemberRepository from '@crowd/data-access-layer/src/old/apps/data_sink_worker/repo/member.repo'
+import { getServiceLogger } from '@crowd/logging'
+import { QueueFactory } from '@crowd/queue'
+import { getRedisClient } from '@crowd/redis'
+import { Client as TemporalClient, getTemporalClient } from '@crowd/temporal'
+import { MemberIdentityType } from '@crowd/types'
+import { DB_CONFIG, QUEUE_CONFIG, REDIS_CONFIG, TEMPORAL_CONFIG } from '../conf'
+import MemberService from '../service/member.service'
+import { OrganizationService } from '../service/organization.service'
 
-const tracer = getServiceTracer()
 const log = getServiceLogger()
 
 const processArguments = process.argv.slice(2)
@@ -31,8 +28,6 @@ if (processArguments.length !== 1) {
 const memberId = processArguments[0]
 
 setImmediate(async () => {
-  const unleash = await getUnleashClient(UNLEASH_CONFIG())
-
   let temporal: TemporalClient | undefined
   // temp for production
   if (TEMPORAL_CONFIG().serverUrl) {
@@ -48,42 +43,17 @@ setImmediate(async () => {
   const loader: QueuePriorityContextLoader = (tenantId: string) =>
     priorityLevelRepo.loadPriorityLevelContext(tenantId)
 
-  const sqsClient = getSqsClient(SQS_CONFIG())
-  const emitter = new DataSinkWorkerEmitter(sqsClient, redis, tracer, unleash, loader, log)
+  const queueClient = QueueFactory.createQueueService(QUEUE_CONFIG())
+  const emitter = new DataSinkWorkerEmitter(queueClient, redis, loader, log)
   await emitter.init()
 
   const dataSinkRepo = new DataSinkRepository(store, log)
   const memberRepo = new MemberRepository(store, log)
 
-  const nodejsWorkerEmitter = new NodejsWorkerEmitter(
-    sqsClient,
-    redis,
-    tracer,
-    unleash,
-    loader,
-    log,
-  )
-  await nodejsWorkerEmitter.init()
-
-  const searchSyncWorkerEmitter = new SearchSyncWorkerEmitter(
-    sqsClient,
-    redis,
-    tracer,
-    unleash,
-    loader,
-    log,
-  )
+  const searchSyncWorkerEmitter = new SearchSyncWorkerEmitter(queueClient, redis, loader, log)
   await searchSyncWorkerEmitter.init()
 
-  const memberService = new MemberService(
-    store,
-    nodejsWorkerEmitter,
-    searchSyncWorkerEmitter,
-    unleash,
-    temporal,
-    redis,
-    log,
-  )
+  const memberService = new MemberService(store, searchSyncWorkerEmitter, temporal, redis, log)
   const orgService = new OrganizationService(store, log)
 
   try {
@@ -94,18 +64,23 @@ setImmediate(async () => {
       process.exit(1)
     }
 
+    const identities = await memberRepo.getIdentities(memberId, member.tenantId)
     log.info(`Processing memberId: ${member.id}`)
 
     const segmentIds = await dataSinkRepo.getSegmentIds(member.tenantId)
     const segmentId = segmentIds[segmentIds.length - 1] // leaf segment id
 
-    if (member.emails) {
-      log.info('Member emails:', JSON.stringify(member.emails))
+    const emailIdentities = identities.filter(
+      (i) => i.verified && i.type === MemberIdentityType.EMAIL,
+    )
+    if (emailIdentities.length > 0) {
+      const emails = emailIdentities.map((i) => i.value)
+      log.info({ memberId, emails }, 'Member emails!')
       const orgs = await memberService.assignOrganizationByEmailDomain(
         member.tenantId,
         segmentId,
         null,
-        member.emails,
+        emails,
       )
 
       if (orgs.length > 0) {
@@ -113,10 +88,15 @@ setImmediate(async () => {
         orgService.addToMember(member.tenantId, segmentId, member.id, orgs)
 
         for (const org of orgs) {
-          await searchSyncWorkerEmitter.triggerOrganizationSync(member.tenantId, org.id, true)
+          await searchSyncWorkerEmitter.triggerOrganizationSync(
+            member.tenantId,
+            org.id,
+            true,
+            segmentId,
+          )
         }
 
-        await searchSyncWorkerEmitter.triggerMemberSync(member.tenantId, member.id, true)
+        await searchSyncWorkerEmitter.triggerMemberSync(member.tenantId, member.id, true, segmentId)
         log.info('Done mapping member to organizations!')
       } else {
         log.info('No organizations found with matching email domains!')

@@ -1,25 +1,27 @@
 <template>
   <div class="relative">
-    <div
-      v-if="loading"
-      class="flex items-center justify-center"
-    >
-      <div
-        v-loading="loading"
-        class="app-page-spinner w-20"
-      />
+    <div v-if="loading" class="flex items-center justify-center">
+      <div v-loading="loading" class="app-page-spinner w-20" />
     </div>
-    <div v-else class="grid grid-cols-3 grid-rows-4 gap-4">
-      <app-integration-list-item
-        v-for="integration in integrationsArray"
-        :key="integration.platform"
-        :integration="integration"
-      />
-      <app-integration-list-item
-        v-if="!hideCustomIntegrations"
-        :integration="customIntegration"
-      />
-    </div>
+    <app-integration-progress-wrapper v-else :segments="[props.segment]">
+      <template #default="{ progress, progressError }">
+        <div class="flex flex-wrap -mx-2.5">
+          <article
+            v-for="integration in integrationsArray"
+            :key="integration.platform"
+            class="px-2.5 w-full sm:1/2 lg:w-1/3 pb-5"
+          >
+            <app-integration-list-item
+              class="h-full"
+              :integration="integration"
+              :progress="progress"
+              :progress-error="progressError"
+            />
+          </article>
+        </div>
+      </template>
+    </app-integration-progress-wrapper>
+
     <app-dialog
       v-model="showGithubDialog"
       size="small"
@@ -34,19 +36,39 @@
         </div>
       </template>
     </app-dialog>
+    <app-dialog
+      v-model="showGitlabDialog"
+      size="small"
+      title="Finishing the setup"
+      :show-loading-icon="true"
+    >
+      <template #content>
+        <div class="px-6 pb-6">
+          We're finishing the last steps of the
+          <span class="font-semibold">GitLab</span> <br />
+          integration setup, please don't reload the page.
+        </div>
+      </template>
+    </app-dialog>
   </div>
 </template>
 
 <script setup>
 import { useStore } from 'vuex';
-import {
-  computed, onMounted, ref,
-} from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import { CrowdIntegrations } from '@/integrations/integrations-config';
 import AppIntegrationListItem from '@/modules/integration/components/integration-list-item.vue';
 import { useRoute } from 'vue-router';
+import AppIntegrationProgressWrapper from '@/modules/integration/components/integration-progress-wrapper.vue';
+import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import {
+  EventType,
+  FeatureEventKey,
+} from '@/shared/modules/monitoring/types/event';
+import { Platform } from '@/shared/modules/platform/types/Platform';
 
+const { trackEvent } = useProductTracking();
 const route = useRoute();
 const store = useStore();
 const props = defineProps({
@@ -54,30 +76,25 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  segment: {
+    type: String,
+    required: true,
+  },
 });
 
 const integrationCount = computed(() => store.state.integration.count);
-const isSegmentIdDifferent = computed(() => store.state.segmentId !== route.params.id);
-
-const customIntegration = ref({
-  platform: 'custom',
-  name: 'Build your own',
-  description:
-    'Use our integration framework to build your own connector.',
-  image: '/images/integrations/custom.svg',
-});
-
-const loading = computed(
-  () => store.getters['integration/loadingFetch'],
+const isSegmentIdDifferent = computed(
+  () => store.state.segmentId !== route.params.id,
 );
+
+const loading = computed(() => store.getters['integration/loadingFetch']);
 
 const integrationsArray = computed(() => (props.onboard
   ? CrowdIntegrations.mappedEnabledConfigs(store)
   : CrowdIntegrations.mappedConfigs(store)));
 
 const showGithubDialog = ref(false);
-
-const hideCustomIntegrations = CrowdIntegrations.getConfig('lfx').hideCustomIntegration;
+const showGitlabDialog = ref(false);
 
 onMounted(async () => {
   localStorage.setItem('segmentId', route.params.id);
@@ -106,7 +123,26 @@ onMounted(async () => {
       await store.dispatch('integration/doDiscordConnect', {
         guildId: params.get('guild_id'),
       });
+
+      trackEvent({
+        key: FeatureEventKey.CONNECT_INTEGRATION,
+        type: EventType.FEATURE,
+        properties: { platform: Platform.DISCORD },
+      });
+    } else if (source === 'gitlab') {
+      showGitlabDialog.value = true;
+      await store.dispatch('integration/doGitlabConnect', {
+        code,
+        state: params.get('state'),
+      });
+      showGitlabDialog.value = false;
     } else {
+      const state = params.get('state');
+
+      if (state === 'noconnect') {
+        return;
+      }
+
       showGithubDialog.value = true;
       await store.dispatch('integration/doGithubConnect', {
         code,

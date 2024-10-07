@@ -16,6 +16,7 @@ export default {
   url: ({ attributes }) => attributes?.url?.stackoverflow,
   chartColor: '#FF9845',
   showProfileLink: true,
+  urlPrefix: 'stackoverflow.com/users/',
   activityDisplay: {
     showLinkToUrl: true,
   },
@@ -25,8 +26,5 @@ export default {
       copy: 'reply',
       number: conversation.activityCount - 1,
     }),
-  },
-  organization: {
-    handle: (identity) => (identity.url ? identity.url.split('/').at(-1) : identity.name),
   },
 };
