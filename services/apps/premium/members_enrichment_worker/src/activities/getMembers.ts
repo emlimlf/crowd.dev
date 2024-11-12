@@ -1,43 +1,56 @@
-import { IMember, FeatureFlag } from '@crowd/types'
-import { isFeatureEnabled } from '@crowd/feature-flags'
-
-import { svc } from '../main'
 import { fetchMembersForEnrichment } from '@crowd/data-access-layer/src/old/apps/premium/members_enrichment_worker'
+import {
+  IEnrichableMember,
+  IMemberEnrichmentSourceQueryInput,
+  MemberEnrichmentSource,
+} from '@crowd/types'
 
-/*
-getMembers is a Temporal activity that retrieves all members available for
-enrichment. Member must have one of GitHub username or email address, must not
-have been enriched in the past 90 days, and must be part of tenant with a plan
-allowing this feature. We limit to 50 members per workflow to not overload
-external APIs.
-*/
-export async function getMembers(alsoUseEmailIdentitiesForEnrichment: boolean): Promise<IMember[]> {
-  let rows: IMember[] = []
+import { EnrichmentSourceServiceFactory } from '../factory'
+import { svc } from '../main'
+import { IEnrichmentService } from '../types'
 
-  try {
-    const db = svc.postgres.reader
-    rows = await fetchMembersForEnrichment(db, alsoUseEmailIdentitiesForEnrichment)
-  } catch (err) {
-    throw new Error(err)
-  }
+export async function getEnrichableMembers(
+  limit: number,
+  sources: MemberEnrichmentSource[],
+): Promise<IEnrichableMember[]> {
+  let rows: IEnrichableMember[] = []
+  const sourceInputs: IMemberEnrichmentSourceQueryInput[] = sources.map((s) => {
+    const srv = EnrichmentSourceServiceFactory.getEnrichmentSourceService(s, svc.log)
+    return {
+      source: s,
+      cacheObsoleteAfterSeconds: srv.cacheObsoleteAfterSeconds,
+      enrichableBySql: srv.enrichableBySql,
+    }
+  })
+  const db = svc.postgres.reader
+  rows = await fetchMembersForEnrichment(db, limit, sourceInputs)
 
-  // Filter rows to only return tenants with this feature flag enabled.
-  const members: IMember[] = []
-  for (const row of rows) {
-    if (
-      await isFeatureEnabled(
-        FeatureFlag.TEMPORAL_MEMBERS_ENRICHMENT,
-        async () => {
-          return {
-            tenantId: row.tenantId,
-          }
-        },
-        svc.unleash,
+  return rows
+}
+
+// Get the most strict parallelism among existing and enrichable sources
+// We only check sources that has activity count cutoff in current range
+export async function getMaxConcurrentRequests(
+  members: IEnrichableMember[],
+  possibleSources: MemberEnrichmentSource[],
+  concurrencyLimit: number,
+): Promise<number> {
+  const serviceMap: Partial<Record<MemberEnrichmentSource, IEnrichmentService>> = {}
+  const currentProcessingActivityCount = members[0].activityCount
+
+  let maxConcurrentRequestsInAllSources = concurrencyLimit
+
+  for (const source of possibleSources) {
+    serviceMap[source] = EnrichmentSourceServiceFactory.getEnrichmentSourceService(source, svc.log)
+    const activityCountCutoff = serviceMap[source].enrichMembersWithActivityMoreThan
+    if (!activityCountCutoff || activityCountCutoff <= currentProcessingActivityCount) {
+      maxConcurrentRequestsInAllSources = Math.min(
+        maxConcurrentRequestsInAllSources,
+        serviceMap[source].maxConcurrentRequests,
       )
-    ) {
-      members.push(row)
     }
   }
+  svc.log.info('Setting max concurrent requests', { maxConcurrentRequestsInAllSources })
 
-  return members
+  return maxConcurrentRequestsInAllSources
 }

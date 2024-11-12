@@ -1,52 +1,84 @@
-import { generateUUIDv4 } from '@crowd/common'
-import { DbStore, DbTransaction } from '@crowd/database'
+import { generateUUIDv4, redactNullByte } from '@crowd/common'
+import { DbConnOrTx, DbStore, DbTransaction } from '@crowd/database'
 import {
   IAttributes,
-  IMember,
+  IEnrichableMember,
+  IMemberEnrichmentCache,
+  IMemberEnrichmentSourceQueryInput,
   IMemberIdentity,
   IOrganizationIdentity,
+  MemberEnrichmentSource,
   MemberIdentityType,
   OrganizationSource,
 } from '@crowd/types'
 
+/**
+ * Gets enrichable members using the provided sources
+ * If a member is enrichable in one source, and not enrichable in another, the member will be returned
+ * Members with at least one missing or old source cache rows will be returned
+ * The reason we're not checking enrichable members and cache age in the same subquery is because of linkedin scraper sources.
+ * These sources also use data from other sources and it's costly to check cache data jsons.
+ * This check is instead done in the application layer.
+ */
 export async function fetchMembersForEnrichment(
   db: DbStore,
-  alsoUseEmailIdentitiesForEnrichment: boolean,
-): Promise<IMember[]> {
-  let identityFilter = ` AND mi.platform = 'github' `
+  limit: number,
+  sourceInputs: IMemberEnrichmentSourceQueryInput[],
+): Promise<IEnrichableMember[]> {
+  const cacheAgeInnerQueryItems = []
+  const enrichableBySqlConditions = []
 
-  if (alsoUseEmailIdentitiesForEnrichment) {
-    identityFilter = ` AND ( mi.platform = 'github' or mi.type = '${MemberIdentityType.EMAIL}' )`
+  sourceInputs.forEach((input) => {
+    cacheAgeInnerQueryItems.push(
+      `
+      ( NOT EXISTS (
+          SELECT 1 FROM "memberEnrichmentCache" mec
+          WHERE mec."memberId" = members.id
+          AND mec.source = '${input.source}'
+          AND EXTRACT(EPOCH FROM (now() - mec."updatedAt")) < ${input.cacheObsoleteAfterSeconds})
+      )`,
+    )
+
+    enrichableBySqlConditions.push(`(${input.enrichableBySql})`)
+  })
+
+  let enrichableBySqlJoined = ''
+
+  if (enrichableBySqlConditions.length > 0) {
+    enrichableBySqlJoined = `(${enrichableBySqlConditions.join(' OR ')}) `
   }
 
   return db.connection().query(
-    `SELECT
+    `
+    SELECT
          members."id",
-         members."displayName",
-         members."attributes",
-         members."contributions",
-         members."score",
-         members."reach",
          members."tenantId",
-         json_agg(json_build_object(
-          'platform', mi.platform,
-          'value', mi.value,
-          'type', mi.type,
-          'verified', mi.verified
-        )) as identities
-     FROM members
-              INNER JOIN tenants ON tenants.id = members."tenantId"
-              INNER JOIN "memberIdentities" mi ON mi."memberId" = members.id and mi.type = '${MemberIdentityType.USERNAME}'
-     WHERE tenants.plan IN ('Scale', 'Enterprise')
-       AND (
-         members."lastEnriched" < NOW() - INTERVAL '90 days'
-             OR members."lastEnriched" IS NULL
-         )
-       ${identityFilter}
-       AND tenants."deletedAt" IS NULL
-       AND members."deletedAt" IS NULL
-     GROUP BY members.id
-         LIMIT 50;`,
+         members."displayName",
+         members.attributes->'location'->>'default' AS location,
+         members.attributes->'websiteUrl'->>'default' AS website,
+         JSON_AGG(
+           JSON_BUILD_OBJECT(
+             'platform', mi.platform,
+             'value', mi.value,
+             'type', mi.type,
+             'verified', mi.verified
+           )
+         ) AS identities,
+         MAX(coalesce("membersGlobalActivityCount".total_count, 0)) AS "activityCount"
+    FROM members
+         INNER JOIN tenants ON tenants.id = members."tenantId"
+         INNER JOIN "memberIdentities" mi ON mi."memberId" = members.id
+         LEFT JOIN "membersGlobalActivityCount" ON "membersGlobalActivityCount"."memberId" = members.id
+    WHERE 
+      ${enrichableBySqlJoined}
+      AND tenants."deletedAt" IS NULL
+      AND members."deletedAt" IS NULL
+      AND (${cacheAgeInnerQueryItems.join(' OR ')})
+    GROUP BY members.id
+    ORDER BY "activityCount" DESC
+    LIMIT $1;
+    `,
+    [limit],
   )
 }
 
@@ -425,4 +457,86 @@ export async function updateMemberAttributes(
     WHERE id = $2 AND "tenantId" = $3;`,
     [attributes, memberId, tenantId],
   )
+}
+
+export async function insertMemberEnrichmentCacheDb<T>(
+  tx: DbConnOrTx,
+  data: T,
+  memberId: string,
+  source: MemberEnrichmentSource,
+) {
+  const dataSanitized = data ? redactNullByte(JSON.stringify(data)) : null
+  return tx.query(
+    `INSERT INTO "memberEnrichmentCache" ("memberId", "data", "createdAt", "updatedAt", "source")
+      VALUES ($1, $2, NOW(), NOW(), $3);`,
+    [memberId, dataSanitized, source],
+  )
+}
+
+export async function updateMemberEnrichmentCacheDb<T>(
+  tx: DbConnOrTx,
+  data: T,
+  memberId: string,
+  source: MemberEnrichmentSource,
+) {
+  const dataSanitized = data ? redactNullByte(JSON.stringify(data)) : null
+  return tx.query(
+    `UPDATE "memberEnrichmentCache"
+      SET
+        "updatedAt" = NOW(),
+        "data" = $2
+      WHERE "memberId" = $1 and source = $3;`,
+    [memberId, dataSanitized, source],
+  )
+}
+
+export async function touchMemberEnrichmentCacheUpdatedAtDb(
+  tx: DbConnOrTx,
+  memberId: string,
+  source: MemberEnrichmentSource,
+) {
+  return tx.query(
+    `UPDATE "memberEnrichmentCache"
+      SET "updatedAt" = NOW()
+      WHERE "memberId" = $1 and source = $2;`,
+    [memberId, source],
+  )
+}
+
+export async function findMemberEnrichmentCacheDb<T>(
+  tx: DbConnOrTx,
+  memberId: string,
+  source: MemberEnrichmentSource,
+): Promise<IMemberEnrichmentCache<T>> {
+  const result = await tx.oneOrNone(
+    `
+    select *
+    from "memberEnrichmentCache"
+    where 
+      source = $(source)
+      and "memberId" = $(memberId);
+    `,
+    { source, memberId },
+  )
+
+  return result ?? null
+}
+
+export async function findMemberEnrichmentCacheForAllSourcesDb<T>(
+  tx: DbConnOrTx,
+  memberId: string,
+  returnRowsWithoutData = false,
+): Promise<IMemberEnrichmentCache<T>[]> {
+  const dataFilter = returnRowsWithoutData ? '' : 'and data is not null'
+  const result = await tx.manyOrNone(
+    `
+    select *
+    from "memberEnrichmentCache"
+    where 
+      "memberId" = $(memberId) ${dataFilter};
+    `,
+    { memberId },
+  )
+
+  return result ?? []
 }

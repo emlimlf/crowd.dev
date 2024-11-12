@@ -21,7 +21,7 @@
         >
           <template #placeholder>
             <div class="w-full h-full bg-gray-50 flex items-center justify-center">
-              <lf-icon name="community-line" :size="12" class="text-gray-400" />
+              <lf-icon-old name="community-line" :size="12" class="text-gray-400" />
             </div>
           </template>
         </lf-avatar>
@@ -38,7 +38,7 @@
           >
             <template #placeholder>
               <div class="w-full h-full bg-gray-50 flex items-center justify-center">
-                <lf-icon name="community-line" :size="12" class="text-gray-400" />
+                <lf-icon-old name="community-line" :size="12" class="text-gray-400" />
               </div>
             </template>
           </lf-avatar>
@@ -56,15 +56,19 @@ import { computed, onMounted } from 'vue';
 import { OrganizationService } from '@/modules/organization/organization-service';
 import { Organization } from '@/modules/organization/types/Organization';
 import LfAvatar from '@/ui-kit/avatar/Avatar.vue';
-import LfIcon from '@/ui-kit/icon/Icon.vue';
+import LfIconOld from '@/ui-kit/icon/IconOld.vue';
 import LfProjectGroupsTags from '@/shared/modules/project-groups/components/project-groups-tags.vue';
 import AppAutocompleteOneInput from '@/shared/form/autocomplete-one-input.vue';
+import { storeToRefs } from 'pinia';
+import { useLfSegmentsStore } from '@/modules/lf/segments/store';
 
 const props = defineProps<{
   modelValue: Organization | null,
 }>();
 
 const emit = defineEmits<{(e: 'update:modelValue', value: Organization | null): any}>();
+
+const { selectedProjectGroup } = storeToRefs(useLfSegmentsStore());
 
 const form = computed<Organization | null>({
   get() {
@@ -81,8 +85,8 @@ const fetchOrganizations = async ({ query } : {
   query,
   limit: 40,
   excludeSegments: true,
-})
-  .then((options: Organization[]) => options.filter((m) => m.id !== form.value?.id));
+  segments: [selectedProjectGroup.value?.id],
+});
 
 const createOrganization = (value: string) => OrganizationService.create({
   name: value,

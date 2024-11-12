@@ -1,41 +1,43 @@
-import { getMembers } from './activities/getMembers'
 import {
-  enrichMemberUsingGitHubHandle,
-  enrichMemberUsingEmailAddress,
-} from './activities/getEnrichmentData'
+  findMemberEnrichmentCache,
+  findMemberIdentityWithTheMostActivityInPlatform,
+  getEnrichmentData,
+  getEnrichmentInput,
+  getObsoleteSourcesOfMember,
+  insertMemberEnrichmentCache,
+  isCacheObsolete,
+  isEnrichableBySource,
+  normalizeEnrichmentData,
+  refreshMemberEnrichmentMaterializedView,
+  touchMemberEnrichmentCacheUpdatedAt,
+  updateMemberEnrichmentCache,
+} from './activities/enrichment'
+import { getEnrichableMembers, getMaxConcurrentRequests } from './activities/getMembers'
+import { refreshToken } from './activities/lf-auth0/authenticateLFAuth0'
 import {
-  normalizeEnrichedMember,
-  updateMergeSuggestions,
-  updateOrganizations,
-} from './activities/normalizeEnrichedMember'
+  getIdentitiesExistInOtherMembers,
+  mergeMembers,
+  updateMemberWithEnrichmentData,
+} from './activities/lf-auth0/enrichLFAuth0'
+import { getEnrichmentLFAuth0 } from './activities/lf-auth0/getEnrichmentLFAuth0'
+import { getLFIDEnrichableMembers } from './activities/lf-auth0/getLFIDEnrichableMembers'
+import {
+  checkTokens,
+  findGithubSourceId,
+  getGithubIdentitiesWithoutSourceId,
+  updateIdentitySourceId,
+} from './activities/lf-auth0/githubIdentities'
 import {
   syncMembersToOpensearch,
   syncOrganizationsToOpensearch,
 } from './activities/syncEnrichedData'
 
-import { refreshToken } from './activities/lf-auth0/authenticateLFAuth0'
-import { getEnrichmentLFAuth0 } from './activities/lf-auth0/getEnrichmentLFAuth0'
-import { getLFIDEnrichableMembers } from './activities/lf-auth0/getLFIDEnrichableMembers'
-import {
-  getGithubIdentitiesWithoutSourceId,
-  checkTokens,
-  findGithubSourceId,
-  updateIdentitySourceId,
-} from './activities/lf-auth0/githubIdentities'
-
-import {
-  getIdentitiesExistInOtherMembers,
-  updateMemberWithEnrichmentData,
-  mergeMembers,
-} from './activities/lf-auth0/enrichLFAuth0'
-
 export {
-  getMembers,
-  enrichMemberUsingGitHubHandle,
-  enrichMemberUsingEmailAddress,
-  normalizeEnrichedMember,
-  updateMergeSuggestions,
-  updateOrganizations,
+  getEnrichableMembers,
+  getEnrichmentData,
+  normalizeEnrichmentData,
+  findMemberEnrichmentCache,
+  insertMemberEnrichmentCache,
   syncMembersToOpensearch,
   syncOrganizationsToOpensearch,
   refreshToken,
@@ -48,4 +50,13 @@ export {
   getIdentitiesExistInOtherMembers,
   updateMemberWithEnrichmentData,
   mergeMembers,
+  isCacheObsolete,
+  touchMemberEnrichmentCacheUpdatedAt,
+  updateMemberEnrichmentCache,
+  isEnrichableBySource,
+  findMemberIdentityWithTheMostActivityInPlatform,
+  refreshMemberEnrichmentMaterializedView,
+  getEnrichmentInput,
+  getMaxConcurrentRequests,
+  getObsoleteSourcesOfMember,
 }

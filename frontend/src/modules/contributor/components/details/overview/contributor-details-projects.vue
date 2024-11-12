@@ -2,7 +2,6 @@
   <lf-card v-bind="$attrs">
     <div class="px-5 py-4 flex justify-between items-center">
       <h6>Projects</h6>
-      <lf-contributor-details-projects-sorting v-model:sorting="sorting" />
     </div>
     <div class="pb-3.5">
       <lf-table class="!overflow-visible">
@@ -15,7 +14,7 @@
               Affiliation
               <el-popover placement="top" width="20rem">
                 <template #reference>
-                  <lf-icon name="question-line" :size="14" class="text-secondary-200 font-normal" />
+                  <lf-icon-old name="question-line" :size="14" class="text-secondary-200 font-normal" />
                 </template>
                 <div class="p-1">
                   <p class="text-small font-semibold mb-2 text-black">
@@ -33,7 +32,7 @@
               Role
               <el-popover placement="top" width="20rem">
                 <template #reference>
-                  <lf-icon name="question-line" :size="14" class="text-secondary-200 font-normal" />
+                  <lf-icon-old name="question-line" :size="14" class="text-secondary-200 font-normal" />
                 </template>
                 <div class="p-1">
                   <p class="text-small font-semibold mb-2 text-black">
@@ -71,9 +70,9 @@
               <div v-if="Object.keys(project.affiliations).length" class="flex items-center gap-1">
                 <lf-contributor-details-projects-affiliation :project="project" />
               </div>
-              <div v-else>
+              <div v-else-if="hasPermission(LfPermission.memberEdit)">
                 <lf-button type="primary-link" size="small" class="!text-primary-300 hover:!text-primary-600" @click="isAffilationEditOpen = true">
-                  <lf-icon name="add-line" />Add affiliation
+                  <lf-icon-old name="add-line" />Add affiliation
                 </lf-button>
               </div>
             </lf-table-cell>
@@ -84,14 +83,23 @@
               <lf-dropdown placement="bottom-end" width="160px">
                 <template #trigger>
                   <lf-button type="secondary-ghost" size="small" :icon-only="true">
-                    <lf-icon name="more-2-fill" />
+                    <lf-icon-old name="more-2-fill" />
                   </lf-button>
                 </template>
                 <lf-dropdown-item @click="viewActivity(project.id)">
-                  <lf-icon name="eye-line" />View activity
+                  <lf-icon-old name="eye-line" />View activity
                 </lf-dropdown-item>
-                <lf-dropdown-item @click="isAffilationEditOpen = true">
-                  <lf-icon name="pencil-line" />Edit affiliation
+                <lf-dropdown-item v-if="hasPermission(LfPermission.memberEdit)" @click="isAffilationEditOpen = true">
+                  <lf-icon-old name="pencil-line" />Edit affiliation
+                </lf-dropdown-item>
+                <lf-dropdown-item
+                  @click="setReportDataModal({
+                    contributor: props.contributor,
+                    type: ReportDataType.PROJECT_AFFILIATION,
+                    attribute: project,
+                  })"
+                >
+                  <lf-icon-old name="feedback-line" class="!text-red-500" />Report issue
                 </lf-dropdown-item>
               </lf-dropdown>
             </lf-table-cell>
@@ -115,7 +123,7 @@
 <script setup lang="ts">
 import LfCard from '@/ui-kit/card/Card.vue';
 import LfButton from '@/ui-kit/button/Button.vue';
-import LfIcon from '@/ui-kit/icon/Icon.vue';
+import LfIconOld from '@/ui-kit/icon/IconOld.vue';
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Contributor, ContributorAffiliation } from '@/modules/contributor/types/Contributor';
@@ -130,8 +138,10 @@ import LfContributorDetailsProjectsAffiliation
   from '@/modules/contributor/components/details/overview/project/contributor-details-projects-affiliation.vue';
 import LfContributorDetailsProjectsMaintainer
   from '@/modules/contributor/components/details/overview/project/contributor-details-projects-maintainer.vue';
-import LfContributorDetailsProjectsSorting
-  from '@/modules/contributor/components/details/overview/project/contributor-details-projects-sorting.vue';
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
+import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
+import { ReportDataType } from '@/shared/modules/report-issue/constants/report-data-type.enum';
+import { useSharedStore } from '@/shared/pinia/shared.store';
 
 const props = defineProps<{
   contributor: Contributor,
@@ -140,8 +150,10 @@ const props = defineProps<{
 const router = useRouter();
 const route = useRoute();
 
+const { hasPermission } = usePermissions();
+const { setReportDataModal } = useSharedStore();
+
 const showMore = ref<boolean>(false);
-const sorting = ref<string>('name_ASC');
 const isAffilationEditOpen = ref<boolean>(false);
 
 const getAffiliations = (projectId: string) => (props.contributor.affiliations || []).filter((affiliation) => affiliation.segmentId === projectId)

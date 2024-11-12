@@ -5,7 +5,7 @@
   >
     <div class="flex items-center justify-between min-h-7">
       <div class="flex items-center">
-        <lf-icon name="link" :size="20" class="text-gray-500 mr-2" />
+        <lf-icon-old name="link" :size="20" class="text-gray-500 mr-2" />
         <lf-tooltip
           :content="props.domain.value"
           :disabled="props.domain.value.length < 25"
@@ -22,40 +22,57 @@
           </a>
         </lf-tooltip>
         <lf-tooltip v-if="props.domain.verified" content="Verified domain" class="ml-1.5">
-          <lf-icon name="verified-badge-line" :size="16" class="text-primary-500" />
+          <lf-icon-old name="verified-badge-line" :size="16" class="text-primary-500" />
         </lf-tooltip>
       </div>
       <lf-dropdown
         v-if="props.domain.type !== OrganizationIdentityType.AFFILIATED_PROFILE
-          && hovered && hasPermission(LfPermission.memberEdit)"
+          && hovered"
         placement="bottom-end"
         width="232px"
       >
         <template #trigger>
           <lf-button type="secondary-ghost" size="small" :icon-only="true">
-            <lf-icon name="more-fill" />
+            <lf-icon-old name="more-fill" />
           </lf-button>
         </template>
 
         <lf-dropdown-item
+          v-if="hasPermission(LfPermission.memberEdit)"
           class="w-full"
           @click="emit('edit')"
         >
-          <lf-icon name="pencil-line" />Edit domain
+          <lf-icon-old name="pencil-line" />Edit domain
         </lf-dropdown-item>
 
         <!-- Unmerge -->
-        <lf-dropdown-item @click="emit('unmerge')">
-          <lf-icon name="link-unlink" />Unmerge domain
+        <lf-dropdown-item
+          v-if="hasPermission(LfPermission.memberEdit)"
+          @click="emit('unmerge')"
+        >
+          <lf-icon-old name="link-unlink" />Unmerge domain
         </lf-dropdown-item>
 
-        <lf-dropdown-separator />
         <lf-dropdown-item
+          @click="setReportDataModal({
+            organization: props.organization,
+            type: ReportDataType.DOMAIN,
+            attribute: props.domain,
+          })"
+        >
+          <lf-icon name="feedback-line" class="!text-red-500" />Report issue
+        </lf-dropdown-item>
+
+        <lf-dropdown-separator
+          v-if="hasPermission(LfPermission.memberEdit)"
+        />
+        <lf-dropdown-item
+          v-if="hasPermission(LfPermission.memberEdit)"
           type="danger"
           class="w-full"
           @click="removeDomain()"
         >
-          <lf-icon name="delete-bin-6-line" />Delete domain
+          <lf-icon-old name="delete-bin-6-line" />Delete domain
         </lf-dropdown-item>
       </lf-dropdown>
     </div>
@@ -74,7 +91,7 @@ import {
   OrganizationIdentity,
   OrganizationIdentityType,
 } from '@/modules/organization/types/Organization';
-import LfIcon from '@/ui-kit/icon/Icon.vue';
+import LfIconOld from '@/ui-kit/icon/IconOld.vue';
 import { withHttp } from '@/utils/string';
 import LfTooltip from '@/ui-kit/tooltip/Tooltip.vue';
 import { CrowdIntegrations } from '@/integrations/integrations-config';
@@ -87,6 +104,8 @@ import { useOrganizationStore } from '@/modules/organization/store/pinia';
 import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
 import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
 import LfDropdownSeparator from '@/ui-kit/dropdown/DropdownSeparator.vue';
+import { ReportDataType } from '@/shared/modules/report-issue/constants/report-data-type.enum';
+import { useSharedStore } from '@/shared/pinia/shared.store';
 
 const props = defineProps<{
   domain: OrganizationIdentity,
@@ -97,6 +116,7 @@ const emit = defineEmits<{(e: 'edit'): void, (e: 'unmerge'): void, }>();
 const platformLabel = (platforms: string[]) => CrowdIntegrations.getPlatformsLabel(platforms);
 
 const { hasPermission } = usePermissions();
+const { setReportDataModal } = useSharedStore();
 const { updateOrganization } = useOrganizationStore();
 
 const hovered = ref(false);

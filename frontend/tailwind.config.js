@@ -27,6 +27,7 @@ const spacing = {
   16: '4rem',
   17: '4.25rem',
   18: '4.5rem',
+  19: '4.75rem',
   20: '5rem',
   21: '5.25rem',
   24: '6rem',
@@ -53,7 +54,8 @@ const spacing = {
   88: '22rem',
   96: '24rem',
   100: '25rem',
-  120: '30rem'
+  120: '30rem',
+  148: '37rem'
 }
 
 module.exports = {

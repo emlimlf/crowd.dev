@@ -13,7 +13,7 @@
       >
         <template #placeholder>
           <div class="w-full h-full bg-gray-50 flex items-center justify-center">
-            <lf-icon name="community-line" :size="16" class="text-gray-400" />
+            <lf-icon-old name="community-line" :size="16" class="text-gray-400" />
           </div>
         </template>
       </lf-avatar>
@@ -41,7 +41,7 @@
           </p>
         </div>
         <p class="text-small text-gray-500 mb-1.5 flex items-center">
-          <lf-icon name="calendar-line" :size="16" class="mr-1.5 text-gray-400" />
+          <lf-icon-old name="calendar-line" :size="16" class="mr-1.5 text-gray-400" />
           {{ getDateRange(props.organization?.memberOrganizations?.dateStart, props.organization?.memberOrganizations?.dateEnd) }}
         </p>
       </div>
@@ -49,24 +49,35 @@
       <lf-dropdown v-if="hovered" placement="bottom-end" width="14.5rem">
         <template #trigger>
           <lf-button type="secondary-ghost" size="small" :icon-only="true">
-            <lf-icon name="more-fill" />
+            <lf-icon name="ellipsis" />
           </lf-button>
         </template>
 
-        <lf-dropdown-item @click="emit('edit')">
-          <lf-icon name="pencil-line" />Edit work experience
+        <lf-dropdown-item v-if="hasPermission(LfPermission.memberEdit)" @click="emit('edit')">
+          <lf-icon-old name="pencil-line" />Edit work experience
         </lf-dropdown-item>
-        <lf-dropdown-separator />
-        <lf-dropdown-item type="danger" @click="removeWorkHistory">
-          <lf-icon name="delete-bin-6-line" />Delete work experience
+        <lf-dropdown-item
+          @click="setReportDataModal({
+            contributor: props.contributor,
+            type: ReportDataType.WORK_EXPERIENCE,
+            attribute: props.organization,
+          })"
+        >
+          <lf-icon-old name="feedback-line" class="!text-red-500" />Report issue
         </lf-dropdown-item>
+        <template v-if="hasPermission(LfPermission.memberEdit)">
+          <lf-dropdown-separator />
+          <lf-dropdown-item type="danger" @click="removeWorkHistory">
+            <lf-icon-old name="delete-bin-6-line" />Delete work experience
+          </lf-dropdown-item>
+        </template>
       </lf-dropdown>
     </div>
   </article>
 </template>
 
 <script setup lang="ts">
-import LfIcon from '@/ui-kit/icon/Icon.vue';
+import LfIconOld from '@/ui-kit/icon/IconOld.vue';
 import { Contributor } from '@/modules/contributor/types/Contributor';
 import LfSvg from '@/shared/svg/svg.vue';
 import LfAvatar from '@/ui-kit/avatar/Avatar.vue';
@@ -84,6 +95,11 @@ import Message from '@/shared/message/message';
 import ConfirmDialog from '@/shared/dialog/confirm-dialog';
 import { EventType, FeatureEventKey } from '@/shared/modules/monitoring/types/event';
 import useProductTracking from '@/shared/modules/monitoring/useProductTracking';
+import usePermissions from '@/shared/modules/permissions/helpers/usePermissions';
+import { LfPermission } from '@/shared/modules/permissions/types/Permissions';
+import { useSharedStore } from '@/shared/pinia/shared.store';
+import { ReportDataType } from '@/shared/modules/report-issue/constants/report-data-type.enum';
+import LfIcon from '@/ui-kit/icon/Icon.vue';
 
 const props = defineProps<{
   organization: Organization,
@@ -95,6 +111,9 @@ const emit = defineEmits<{(e:'edit'): void}>();
 const { selectedProjectGroup } = storeToRefs(useLfSegmentsStore());
 const { deleteContributorOrganization } = useContributorStore();
 const { trackEvent } = useProductTracking();
+
+const { hasPermission } = usePermissions();
+const { setReportDataModal } = useSharedStore();
 
 const hovered = ref<boolean>(false);
 
@@ -119,7 +138,7 @@ const removeWorkHistory = () => {
     message: "Are you sure you want to proceed? You can't undo this action",
     confirmButtonText: 'Confirm',
     cancelButtonText: 'Cancel',
-    icon: 'ri-delete-bin-line',
+    icon: 'fa-light fa-trash-can',
   }).then(() => {
     trackEvent({
       key: FeatureEventKey.DELETE_WORK_EXPERIENCE,

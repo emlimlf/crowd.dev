@@ -17,7 +17,7 @@
         />
       </lf-tooltip>
       <lf-tooltip v-else content="Custom identity" placement="top-start">
-        <lf-icon
+        <lf-icon-old
           name="fingerprint-fill"
           :size="20"
           class="text-gray-600"
@@ -47,39 +47,56 @@
     </div>
 
     <!-- Dropdown -->
-    <lf-dropdown v-if="hovered && hasPermission(LfPermission.organizationEdit)" placement="bottom-end" width="232px">
+    <lf-dropdown v-if="hovered" placement="bottom-end" width="232px">
       <template #trigger>
         <lf-button type="secondary-ghost" size="small" :icon-only="true">
-          <lf-icon name="more-fill" />
+          <lf-icon-old name="more-fill" />
         </lf-button>
       </template>
       <!-- Edit identity -->
       <lf-dropdown-item
+        v-if="hasPermission(LfPermission.organizationEdit)"
         class="w-full"
         @click="emit('edit')"
       >
-        <lf-icon name="pencil-line" />Edit identity
+        <lf-icon-old name="pencil-line" />Edit identity
       </lf-dropdown-item>
 
       <!-- Unmerge -->
-      <lf-dropdown-item @click="emit('unmerge')">
-        <lf-icon name="link-unlink" />Unmerge identity
+      <lf-dropdown-item
+        v-if="hasPermission(LfPermission.organizationEdit)"
+        @click="emit('unmerge')"
+      >
+        <lf-icon-old name="link-unlink" />Unmerge identity
       </lf-dropdown-item>
 
-      <lf-dropdown-separator />
       <lf-dropdown-item
+        @click="setReportDataModal({
+          organization: props.organization,
+          type: ReportDataType.IDENTITY,
+          attribute: props.identity,
+        })"
+      >
+        <lf-icon name="feedback-line" class="!text-red-500" />Report issue
+      </lf-dropdown-item>
+
+      <lf-dropdown-separator
+        v-if="hasPermission(LfPermission.organizationEdit)"
+      />
+      <lf-dropdown-item
+        v-if="hasPermission(LfPermission.organizationEdit)"
         type="danger"
         class="w-full"
         @click="removeIdentity"
       >
-        <lf-icon name="delete-bin-6-line" />Delete identity
+        <lf-icon-old name="delete-bin-6-line" />Delete identity
       </lf-dropdown-item>
     </lf-dropdown>
   </article>
 </template>
 
 <script setup lang="ts">
-import LfIcon from '@/ui-kit/icon/Icon.vue';
+import LfIconOld from '@/ui-kit/icon/IconOld.vue';
 import { CrowdIntegrations } from '@/integrations/integrations-config';
 import LfTooltip from '@/ui-kit/tooltip/Tooltip.vue';
 import LfButton from '@/ui-kit/button/Button.vue';
@@ -93,6 +110,8 @@ import { ref } from 'vue';
 import { Organization, OrganizationIdentity } from '@/modules/organization/types/Organization';
 import { useOrganizationStore } from '@/modules/organization/store/pinia';
 import LfVerifiedIdentityBadge from '@/shared/modules/identities/components/verified-identity-badge.vue';
+import { useSharedStore } from '@/shared/pinia/shared.store';
+import { ReportDataType } from '@/shared/modules/report-issue/constants/report-data-type.enum';
 
 const props = defineProps<{
   identity: OrganizationIdentity,
@@ -102,6 +121,7 @@ const props = defineProps<{
 const emit = defineEmits<{(e: 'edit'): void, (e: 'unmerge'): void }>();
 
 const { hasPermission } = usePermissions();
+const { setReportDataModal } = useSharedStore();
 
 const { updateOrganization } = useOrganizationStore();
 

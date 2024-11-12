@@ -1,32 +1,34 @@
 /* eslint-disable  @typescript-eslint/no-explicit-any */
+import verifyGithubWebhook from 'verify-github-webhook'
+
 import {
+  IProcessStreamContext,
   IProcessWebhookStreamContext,
   ProcessWebhookStreamHandler,
-  IProcessStreamContext,
 } from '../../types'
-import {
-  GithubWebhookPayload,
-  GithubPlatformSettings,
-  GithubWehookEvent,
-  GithubWebhookData,
-  GithubPrepareMemberOutput,
-  GithubWebhookSubType,
-  GithubStreamType,
-  Repo,
-  GithubBasicStream,
-  GithubPrepareOrgMemberOutput,
-} from './types'
-import verifyGithubWebhook from 'verify-github-webhook'
+
 import getMember from './api/graphql/members'
 import getOrganization from './api/graphql/organizations'
-import { prepareMember, prepareBotMember } from './processStream'
 import TeamsQuery from './api/graphql/teams'
 import { GithubWebhookTeam } from './api/graphql/types'
+import { prepareBotMember, prepareMember } from './processStream'
 import {
-  processPullCommitsStream,
-  getGithubToken,
   getConcurrentRequestLimiter,
+  getGithubToken,
+  processPullCommitsStream,
 } from './processStream'
+import {
+  GithubBasicStream,
+  GithubPlatformSettings,
+  GithubPrepareMemberOutput,
+  GithubPrepareOrgMemberOutput,
+  GithubStreamType,
+  GithubWebhookData,
+  GithubWebhookPayload,
+  GithubWebhookSubType,
+  GithubWehookEvent,
+  Repo,
+} from './types'
 
 const IS_TEST_ENV: boolean = process.env.NODE_ENV === 'test'
 
@@ -464,7 +466,8 @@ const handler: ProcessWebhookStreamHandler = async (ctx) => {
         await parseWebhookPullRequestReviewComment(data, ctx)
         break
       default:
-        await ctx.abortWithError(`Unknown Github webhook event: ${event}`)
+        ctx.log.debug({ event }, 'Unknown Github webhook event!')
+        return
     }
   }
 }

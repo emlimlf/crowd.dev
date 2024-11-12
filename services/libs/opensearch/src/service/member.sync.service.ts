@@ -27,10 +27,12 @@ import {
   IMemberWithAggregatesForMergeSuggestions,
   MemberAttributeType,
 } from '@crowd/types'
+
 import { IndexedEntityType } from '../repo/indexing.data'
 import { IndexingRepository } from '../repo/indexing.repo'
 import { MemberRepository } from '../repo/member.repo'
 import { OpenSearchIndex } from '../types'
+
 import { IMemberSyncResult } from './member.sync.data'
 import { IPagedSearchResponse, ISearchHit } from './opensearch.data'
 import { OpenSearchService } from './opensearch.service'
@@ -315,11 +317,16 @@ export class MemberSyncService {
     const now = new Date()
 
     const loadNextPage = async (lastId?: string): Promise<string[]> => {
-      const memberIdData = await this.memberRepo.getOrganizationMembersForSync(
-        organizationId,
-        batchSize,
-        lastId,
+      this.log.info('Loading next page of organization members!', { organizationId, lastId })
+      const memberIdData = await logExecutionTimeV2(
+        () => this.memberRepo.getOrganizationMembersForSync(organizationId, batchSize, lastId),
+        this.log,
+        `getOrganizationMembersForSync`,
       )
+
+      if (memberIdData.length === 0) {
+        return []
+      }
 
       const membersWithActivities = await filterMembersWithActivities(
         this.qdbStore.connection(),
@@ -334,8 +341,13 @@ export class MemberSyncService {
     let memberIds: string[] = await loadNextPage()
 
     while (memberIds.length > 0) {
-      for (const memberId of memberIds) {
-        const { membersSynced, documentsIndexed } = await this.syncMembers(memberId)
+      for (let i = 0; i < memberIds.length; i++) {
+        const memberId = memberIds[i]
+        const { membersSynced, documentsIndexed } = await logExecutionTimeV2(
+          () => this.syncMembers(memberId),
+          this.log,
+          `syncMembers (${i}/${memberIds.length})`,
+        )
 
         docCount += documentsIndexed
         memberCount += membersSynced
@@ -369,7 +381,7 @@ export class MemberSyncService {
 
       try {
         memberData = await logExecutionTimeV2(
-          async () => getMemberAggregates(this.qdbStore.connection(), memberId),
+          () => getMemberAggregates(this.qdbStore.connection(), memberId),
           this.log,
           'getMemberAggregates',
         )
@@ -380,7 +392,11 @@ export class MemberSyncService {
 
         // get segment data to aggregate for projects and project groups
         const subprojectSegmentIds = memberData.map((m) => m.segmentId)
-        const segmentData = await fetchManySegments(qx, subprojectSegmentIds)
+        const segmentData = await logExecutionTimeV2(
+          () => fetchManySegments(qx, subprojectSegmentIds),
+          this.log,
+          'fetchManySegments',
+        )
 
         if (segmentData.find((s) => s.type !== 'subproject')) {
           throw new Error('Only subprojects should be set to activities.segmentId!')
@@ -418,19 +434,22 @@ export class MemberSyncService {
 
       if (memberData.length > 0) {
         try {
-          await logExecutionTimeV2(
-            async () =>
-              this.memberRepo.transactionally(
-                async (txRepo) => {
-                  const qx = repoQx(txRepo)
-                  await cleanupMemberAggregates(qx, memberId)
-                  await insertMemberSegments(qx, memberData)
-                },
-                undefined,
-                true,
-              ),
-            this.log,
-            'insertMemberSegments',
+          await this.memberRepo.transactionally(
+            async (txRepo) => {
+              const qx = repoQx(txRepo)
+              await logExecutionTimeV2(
+                () => cleanupMemberAggregates(qx, memberId),
+                this.log,
+                'cleanupMemberAggregates',
+              )
+              await logExecutionTimeV2(
+                () => insertMemberSegments(qx, memberData),
+                this.log,
+                'insertMemberSegments',
+              )
+            },
+            undefined,
+            true,
           )
 
           documentsIndexed += memberData.length
@@ -465,18 +484,26 @@ export class MemberSyncService {
         MemberField.DISPLAY_NAME,
         MemberField.ATTRIBUTES,
       ])
+
+      if (!base) {
+        return
+      }
+
       const attributes = await this.memberRepo.getTenantMemberAttributes(base.tenantId)
       const data = await buildFullMemberForMergeSuggestions(qx, base)
       const prefixed = MemberSyncService.prefixData(data, attributes)
       await this.openSearchService.index(memberId, OpenSearchIndex.MEMBERS, prefixed)
     }
-    await logExecutionTimeV2(
-      async () => syncMembersToOpensearchForMergeSuggestions(memberId),
-      this.log,
-      'syncMembersToOpensearchForMergeSuggestions',
-    )
+    await syncMembersToOpensearchForMergeSuggestions(memberId)
 
-    return syncResults
+    if (syncResults) {
+      return syncResults
+    }
+
+    return {
+      membersSynced: 0,
+      documentsIndexed: 0,
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
